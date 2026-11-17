@@ -27,8 +27,9 @@ test("common funding review persists only cautious aggregate signals", {timeout:
   assert.ok(risk.reasons.includes("POSSIBLE_COORDINATED_LAUNCH"));
   assert.equal(risk.fundingEvidence.commonControlProven,false);
   assert.equal(risk.optionListingAllowed,false);
-  await assert.rejects(store.recordFundingReview({...report,commonControlProven:true}
-    as unknown as FundingLinkReport));
+  await assert.rejects(store.recordFundingReview(
+    {...report,commonControlProven:true} as unknown as FundingLinkReport
+  ));
  }finally{await store.close();}
 });
 test("failed funding RPC creates unavailable evidence rather than no link", {timeout:25000},async t=>{
