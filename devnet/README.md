@@ -41,7 +41,7 @@ A developer/operator (not a user of the exchange) would:
 4. Expand the already passing local-validator instruction tests to cover onchain *oracle-timeout refunds*, hostile token-program accounts, property-based fuzzing and more comprehensive unauthorized-caller and replay cases.
 5. Independently inspect deployed program ID, upgrade authority, escrow token accounts and event/transaction receipts.
 
-These steps are **not completed**. The current connected Railway services are deliberately not linked to this unaudited program and continue to refuse real-money trading.
+Public devnet deployment, persistent deployment key management and comprehensive adversarial tests are **not completed**. The current connected Railway services are deliberately not linked to this unaudited program and continue to refuse real-money trading.
 
 ## Critical risks before any mainnet release
 
