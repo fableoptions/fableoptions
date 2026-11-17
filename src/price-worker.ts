@@ -76,13 +76,14 @@ while(active){
       // No higher-rate provider, no scans of arbitrary wallets or funding graphs.
       batchNumber++;
       if(batchNumber%6===0 && rpcUrl.startsWith("https://")){
+        let ownershipCandidate:{mint:string;symbol:string}|null=null;
         try{
-          const candidate=await store.dueOwnershipAudit();
-          if(candidate){
-            const audit=await fetchOwnershipAudit(rpcUrl,candidate.mint);
+          ownershipCandidate=await store.dueOwnershipAudit();
+          if(ownershipCandidate){
+            const audit=await fetchOwnershipAudit(rpcUrl,ownershipCandidate.mint);
             await store.recordOwnershipAudit(audit);
             process.stderr.write("[fable] ownership snapshot "+JSON.stringify({
-              mint:candidate.mint,slot:audit.contextSlot,
+              mint:ownershipCandidate.mint,slot:audit.contextSlot,
               topTokenAccountPct:audit.topTokenAccountPct,
               topTenTokenAccountsPct:audit.topTenTokenAccountsPct,
               riskSignals:audit.riskSignals,
@@ -91,8 +92,12 @@ while(active){
           }
         }catch(error){
           // A failed RPC check cannot mark ownership safe or unlocked.
-          process.stderr.write("[fable] ownership audit unavailable: "+
-            (error instanceof Error?error.message:"unknown")+"\\n");
+          const reason=error instanceof Error?error.message:"unknown";
+          if(ownershipCandidate){
+            try{await store.recordOwnershipFailure(ownershipCandidate.mint,reason);}
+            catch(failure){process.stderr.write("[fable] audit cooldown write failed: "+String(failure)+"\\n");}
+          }
+          process.stderr.write("[fable] ownership audit unavailable: "+reason+"\\n");
         }
       }
       // One historical block read per ~40 batches, only for tokens already
