@@ -97,7 +97,7 @@ function connect() {
       const value = message.params?.result?.value;
       if (message.method !== "logsNotification" || !value?.signature || value.err) return;
       // Only fetch transactions whose logs indicate token creation.
-      if (!value.logs?.some(line => /Instruction: Create(?:V2)?(?:\\b|$)/i.test(line))) return;
+      if (!value.logs?.some(line => /Instruction: Create(?:V2)?(?:\b|$)/i.test(line))) return;
       if (seen.has(value.signature)) return;
       seen.add(value.signature);
       if (seen.size > 50000) seen.clear();
