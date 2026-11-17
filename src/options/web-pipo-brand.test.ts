@@ -7,19 +7,13 @@ const styles=readFileSync("web/style.css","utf8");
 const orbitStyles=readFileSync("web/orbit.css","utf8");
 const canvas=readFileSync("web/orbit-polish.js","utf8");
 
-test("gradient F serves as the Fable wordmark without a separate icon",()=>{
+test("Fable uses an ordinary gradient wordmark with no separate icon",()=>{
   assert.ok(!html.includes('class="brand-icon"'));
-  assert.equal((html.match(/class="brand-letter-f"/g)||[]).length,3);
-  assert.equal((html.match(/class="brand-name">able<\/span>/g)||[]).length,3);
-  for(const id of ["fable-f-header","fable-f-footer","fable-f-ticket"]){
-    assert.ok(html.includes('linearGradient id="'+id+'"'));
-    assert.ok(html.includes('stroke="url(#'+id+')"'));
-  }
-  assert.match(html,/stop-color="#a3ceff"/);
-  assert.match(html,/stop-color="#e6b093"/);
+  assert.ok(!html.includes('class="brand-letter-f"'));
+  assert.equal((html.match(/class="brand-name">Fable<\/span>/g)||[]).length,3);
   assert.match(html,/aria-label="Fable home"/);
-  assert.match(styles,/\.brand-letter-f\s*\{/);
-  assert.match(styles,/\.brand \.brand-name\s*\{/);
+  assert.match(styles,/\.brand-name\s*\{[^}]*background:linear-gradient/s);
+  assert.match(styles,/\.brand-name\s*\{[^}]*-webkit-background-clip:text/s);
 });
 test("Fable's global UI and globe have non-green Pipo overrides",()=>{
   assert.match(styles,/--brand-gradient:linear-gradient\(/);
