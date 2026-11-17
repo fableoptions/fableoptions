@@ -1,9 +1,5 @@
 name: Public Solana devnet Fable options test (disposable test tokens)
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/public-devnet-options-smoke.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -42,42 +38,35 @@ jobs:
           echo "PUBLIC_DEVNET_PROGRAM_ID=$PROGRAM_ID"
           echo "PUBLIC_DEVNET_FEE_PAYER=$PAYER_ID"
           echo "Temporary program key created; no mainnet keys or real USDC."
-      - name: Fund disposable payer using free DEVNET faucet
+      - name: Fund DEVNET test payer from free faucets (browser assist allowed)
         run: |
           set -euo pipefail
           RPC=https://api.devnet.solana.com
           solana cluster-version --url "$RPC"
           solana config set --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"
-          # No paid providers, no mainnet, no unmaintained faucet miners.
-          PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
-          if [ -z "$PAYER_LAMPORTS" ]; then
-            echo "::error::Could not read devnet payer balance."
+          echo "::notice::Public DEVNET-only test wallet: $(solana address -k "$FABLE_TEST_PAYER_KEYPAIR")"
+          echo "::notice::If CLI airdrop is rate-limited, use your own browser to request about 3 free DEVNET SOL for that PUBLIC ADDRESS; never send real SOL."
+          for attempt in 1 2; do
+            solana airdrop 2 --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" || true
+          done
+          # If runner IP is rate-limited, let the human fund this disposable
+          # public address with the official DEVNET faucet in their browser.
+          # Never ask for / display a private key. This is a manual opt-in run.
+          FUNDED=0
+          for round in $(seq 1 24); do
+            LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
+            if [ -n "$LAMPORTS" ] && [ "$LAMPORTS" -ge 2500000000 ]; then
+              FUNDED=1
+              echo "Free DEVNET funding received: $LAMPORTS lamports."
+              break
+            fi
+            echo "Devnet wallet funding not yet available (check $round/24)."
+            sleep 25
+          done
+          if [ "$FUNDED" -ne 1 ]; then
+            echo "::error::PUBLIC_DEVNET_FUNDING_UNAVAILABLE: 2.5 devnet SOL minimum. No deployment attempted."
             exit 2
           fi
-          if [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
-            for attempt in 1 2; do
-              if solana airdrop 2 --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"; then
-                echo "Public devnet airdrop accepted."
-              else
-                echo "Public devnet airdrop $attempt rate-limited or unavailable."
-              fi
-              PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
-              [ -n "$PAYER_LAMPORTS" ] && [ "$PAYER_LAMPORTS" -ge 2500000000 ] && break
-              sleep 5
-            done
-          fi
-          if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
-            echo "::error::PUBLIC_DEVNET_FUNDING_UNAVAILABLE: at least 2.5 free devnet SOL required."
-            echo "Use a separate devnet-only funded payer in the FABLE_DEVNET_TEST_PAYER_B64 repository Actions secret; never use a mainnet wallet."
-            {
-              echo "### Public devnet deployment blocked by free faucet"
-              echo "GitHub shared-runner faucet requests were rate-limited. No paid provider or real funds were used."
-              echo "Next action: configure a dedicated devnet-only payer in Actions secret FABLE_DEVNET_TEST_PAYER_B64 and fund it using the free Solana devnet faucet."
-              echo "Do not put private signing keys in the repo, logs, or chat."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 2
-          fi
-          echo "Fee payer has sufficient valueless devnet SOL to attempt deployment."
       - name: Build executable with disposable program ID
         run: |
           set -euo pipefail
