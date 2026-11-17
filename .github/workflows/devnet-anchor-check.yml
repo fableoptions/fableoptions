@@ -1,0 +1,27 @@
+name: Build experimental devnet options contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'devnet/**'
+      - '.github/workflows/devnet-anchor-check.yml'
+  pull_request:
+    paths:
+      - 'devnet/**'
+      - '.github/workflows/devnet-anchor-check.yml'
+jobs:
+  rust-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: devnet
+      - name: Compile experimental Anchor program
+        run: cargo check --manifest-path devnet/Cargo.toml --locked
+      - name: Check Rust state math unit tests
+        run: cargo test --manifest-path devnet/Cargo.toml --locked
