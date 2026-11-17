@@ -20,6 +20,11 @@ export interface TrackedRiskRow {
   mint_authority_revoked?:boolean|null;
   freeze_authority_revoked?:boolean|null;
   ownership_risk_signals?:string[]|null;
+  slot_analysis_status?:string|null;
+  positive_delta_transactions?:number|null;
+  distinct_reported_owners?:number|null;
+  slot_repeated_owner_accounts?:number|null;
+  slot_possible_coordination?:string|null;
 }
 function timestamp(value:string|Date|null|undefined):string|null {
   if(value instanceof Date)return Number.isFinite(value.getTime())?value.toISOString():null;
@@ -36,7 +41,7 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
     topHolderConcentrationPct:null,
     topTenConcentrationPct:null,
     holderAccountsClassified:false,
-    launchBundleEvidence:"unknown",
+    launchBundleEvidence:row.slot_possible_coordination==="needs_review"?"suspected":"unknown",
     suspiciousVolumeEvidence:"unknown",
     mintAuthorityRevoked:row.mint_authority_revoked??null,
     freezeAuthorityRevoked:row.freeze_authority_revoked??null,
@@ -49,6 +54,15 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
   return {
     ...assessment,
     reasons:[...new Set([...assessment.reasons,...(visibleConcentration?["UNCLASSIFIED_OWNERSHIP_CONCENTRATION_REVIEW"]:[])])],
+    launchSlotEvidence:{
+      analysisStatus:row.slot_analysis_status??"not_checked",
+      positiveDeltaTransactions:row.positive_delta_transactions??null,
+      distinctReportedOwners:row.distinct_reported_owners??null,
+      repeatedOwnerAccounts:row.slot_repeated_owner_accounts??null,
+      coordinationSignal:row.slot_possible_coordination??"unknown",
+      bundleProven:false,
+      allLaunchTransactionsCovered:false
+    },
     ownershipEvidence:{
       observedAt:timestamp(row.ownership_observed_at),
       topTokenAccountPct:row.top_account_pct??null,
