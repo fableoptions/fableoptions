@@ -28,4 +28,4 @@ process.stdout.write(JSON.stringify({
 },null,2)+"\n");
 
 // A missing or invalid mainnet program is a FAILED integration gate, not a successful smoke test.
-if(result.status!=="programdata_matched"||!result.programDataVerified)process.exitCode=2;\n
+if(result.status!=="programdata_matched"||!result.programDataVerified)process.exitCode=2;
