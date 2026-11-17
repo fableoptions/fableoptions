@@ -1,0 +1,26 @@
+name: Sample live Pump.fun mainnet decoding
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/pump-mainnet-validation.ts'
+      - 'src/pump-decode.ts'
+      - 'src/pump-verification.ts'
+      - '.github/workflows/mainnet-smoke.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Test live Solana RPC sample
+        env:
+          VERIFY_SAMPLE_LIMIT: '12'
+        run: npm run verify:pump:mainnet
