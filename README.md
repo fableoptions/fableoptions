@@ -4,6 +4,12 @@ Open-source foundation for a Solana memecoin options discovery platform.
 
 > **Status: infrastructure prototype only.** No live options, deposits, custody, or real-money execution is implemented. The token feed is **not** a representation of executable options liquidity. Never send funds to this repository or assume a listed token has options available.
 
+## Experimental Solana devnet contract
+
+A **new, unaudited Anchor test program** for USDC-style capped calls/puts lives in [devnet/README.md](devnet/README.md). Its Rust source compiles in GitHub CI. A local offchain lifecycle simulator tests locking test collateral, paying premiums, mock expiry pricing, capped payouts, cancellation, replay rejection and oracle-timeout refund.
+
+**Not deployed on devnet or mainnet; no real-money escrow, oracle, fills or payouts exist.** It is strictly separate from the existing read-only Railway scanner/API. Only six-decimal disposable SPL *test tokens* are permitted by design (Circle's real USDC mint is explicitly rejected).
+
 ## First milestone: $300K crossing scanner
 
 A small TypeScript service polls GeckoTerminal's Solana new-pools feed, checks token metadata and USD market cap, and emits an event **only when an observed token moves from below $300,000 to at or above $300,000**.
