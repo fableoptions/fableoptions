@@ -1,0 +1,22 @@
+name: Check one mainnet Pump.fun token ownership snapshot
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/options/mainnet-ownership-smoke.ts'
+      - '.github/workflows/ownership-mainnet-smoke.yml'
+  workflow_dispatch:
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Sample one existing token with public Solana RPC
+        run: node --import tsx src/options/mainnet-ownership-smoke.ts
