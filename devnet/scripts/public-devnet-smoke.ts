@@ -111,6 +111,19 @@ async function main(){
  if((await getAccount(connection,v,"confirmed")).amount!==120_000_000n)
    throw new Error("premature_refund_modified_collateral");
 
+ // Exercise unauthorized mock price rejection before testing valid oracle.
+ let denied=false;
+ try{await send("unauthorized_mock_price",ix("publish_mock_expiry",[
+  k(buyer.publicKey,true),k(config),k(p,false,true)
+ ],b8(5_000_000_000n)),[buyer]);}catch{denied=true;}
+ if(!denied)throw new Error("unauthorized_mock_oracle_accepted");
+
+ // Real clock time passes on local validator; no falsified onchain expiry.
+ while(Math.floor(Date.now()/1000)<Number(expiry)+1)
+   await new Promise(resolve=>setTimeout(resolve,1000));
+ await send("publish_mock_expiry",ix("publish_mock_expiry",[
+  k(payer.publicKey,true),k(config),k(p,false,true)
+ ],b8(5_000_000_000n)),[]);
  // Negative-path regression: substituting the writer's token account as the
  // buyer payout destination must be rejected by onchain owner constraints.
  const wrongBuyerDestination=ix("settle_mock",[
@@ -125,19 +138,6 @@ async function main(){
  if((await getAccount(connection,v,"confirmed")).amount!==120_000_000n)
    throw new Error("payout_substitution_modified_collateral");
 
- // Exercise unauthorized mock price rejection before testing valid oracle.
- let denied=false;
- try{await send("unauthorized_mock_price",ix("publish_mock_expiry",[
-  k(buyer.publicKey,true),k(config),k(p,false,true)
- ],b8(5_000_000_000n)),[buyer]);}catch{denied=true;}
- if(!denied)throw new Error("unauthorized_mock_oracle_accepted");
-
- // Real clock time passes on local validator; no falsified onchain expiry.
- while(Math.floor(Date.now()/1000)<Number(expiry)+1)
-   await new Promise(resolve=>setTimeout(resolve,1000));
- await send("publish_mock_expiry",ix("publish_mock_expiry",[
-  k(payer.publicKey,true),k(config),k(p,false,true)
- ],b8(5_000_000_000n)),[]);
  const settle=ix("settle_mock",[
   k(payer.publicKey,true),k(config),k(testMint),k(p,false,true),
   k(buyerToken,false,true),k(writerToken,false,true),k(v,false,true),
