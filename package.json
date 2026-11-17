@@ -17,13 +17,15 @@
     "test:rfq-integration": "node --import tsx src/options/rfq-http.integration.ts",
     "verify:pump:mainnet": "tsx src/pump-mainnet-validation.ts",
     "verify:venue:program": "tsx src/options/check-venue-program.ts",
-    "verify:usdc:account": "tsx src/options/inspect-usdc-account.ts"
+    "verify:usdc:account": "tsx src/options/inspect-usdc-account.ts",
+    "test:solana:local": "tsx devnet/scripts/local-validator-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "@types/pg": "^8.15.5"
+    "@types/pg": "^8.15.5",
+    "@solana/spl-token": "^0.4.15"
   },
   "dependencies": {
     "bs58": "^6.0.0",
