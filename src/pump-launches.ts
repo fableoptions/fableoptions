@@ -1,57 +1,125 @@
 import { decodeLaunches, PUMP_PROGRAM_ID, type ParsedTx } from "./pump-decode.js";
-const apiKey = process.env.HELIUS_API_KEY;
-const wsUrl = process.env.SOLANA_WS_URL ?? (apiKey ? `wss://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(apiKey)}` : "");
-const rpcUrl = process.env.SOLANA_RPC_URL ?? (apiKey ? `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(apiKey)}` : "");
-if (!wsUrl.startsWith("wss://") || !rpcUrl.startsWith("https://")) throw new Error("Configure HELIUS_API_KEY locally, or SOLANA_WS_URL and SOLANA_RPC_URL");
-let shuttingDown = false;
-let ws: WebSocket | undefined;
+
+const key = process.env.HELIUS_API_KEY;
+const wsUrl = process.env.SOLANA_WS_URL ?? (key ? `wss://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}` : "");
+const rpcUrl = process.env.SOLANA_RPC_URL ?? (key ? `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}` : "");
+if (!wsUrl.startsWith("wss://") || !rpcUrl.startsWith("https://")) throw new Error("Configure HELIUS_API_KEY or secure Solana RPC URLs");
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 const seen = new Set<string>();
 const queue: string[] = [];
-let active = 0;
+let shuttingDown = false;
+let ws: WebSocket | undefined;
+let nextRequestAt = 0;
+let requestBackoffUntil = 0;
+let dropped = 0;
+
 async function rpc(method: string, params: unknown[]): Promise<unknown> {
-  const res=await fetch(rpcUrl,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params}),signal:AbortSignal.timeout(15000)});
+  const now = Date.now();
+  await sleep(Math.max(0, nextRequestAt - now, requestBackoffUntil - now));
+  nextRequestAt = Date.now() + 1200; // Conservative throttle, not a guarantee of provider quota.
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (res.status === 429) {
+    const retrySeconds = Number(res.headers.get("retry-after"));
+    const backoff = Number.isFinite(retrySeconds) && retrySeconds > 0 ? retrySeconds * 1000 : 60000;
+    requestBackoffUntil = Date.now() + Math.min(Math.max(backoff, 10000), 180000);
+    throw new Error("RATE_LIMITED");
+  }
   if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
-  const json=await res.json() as {result?:unknown;error?:unknown};
-  if (json.error) throw new Error(JSON.stringify(json.error));
+  const json = await res.json() as { result?: unknown; error?: { code?: number; message?: string } };
+  if (json.error?.code === 429 || json.error?.code === -32005) {
+    requestBackoffUntil = Date.now() + 60000;
+    throw new Error("RATE_LIMITED");
+  }
+  if (json.error) throw new Error(`RPC error ${json.error.code ?? "unknown"}`);
   return json.result;
 }
-async function processSignature(sig: string) {
-  try {
-    let tx: unknown = null;
-    for (let attempt=0;attempt<5 && !tx;attempt++) {
-      tx=await rpc("getTransaction",[sig,{encoding:"jsonParsed",commitment:"confirmed",maxSupportedTransactionVersion:0}]);
-      if (!tx) await new Promise(r=>setTimeout(r,600*(attempt+1)));
+
+async function processSignature(signature: string) {
+  for (let attempt = 0; attempt < 4 && !shuttingDown; attempt++) {
+    try {
+      const result = await rpc("getTransaction", [signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]);
+      if (result) {
+        for (const launch of decodeLaunches(result as ParsedTx)) {
+          process.stdout.write(JSON.stringify({
+            event: "pump_launch", ...launch, verifiedInstruction: true,
+            marketCapUsd: null, optionsAvailable: false
+          }) + "\n");
+        }
+        return;
+      }
+      await sleep(700 * (attempt + 1));
+    } catch (error) {
+      if (String(error).includes("RATE_LIMITED")) {
+        process.stderr.write("[fable] Helius rate limit hit; backing off; missed activity needs backfill\n");
+        return;
+      }
+      if (attempt === 3) process.stderr.write(`[fable] transaction fetch failed: ${String(error)}\n`);
+      else await sleep(1500 * (attempt + 1));
     }
-    if (!tx) throw new Error("transaction unavailable after retries");
-    for (const launch of decodeLaunches(tx as ParsedTx)) {
-      process.stdout.write(JSON.stringify({event:"pump_launch",...launch,verifiedInstruction:true,marketCapUsd:null,optionsAvailable:false})+"\n");
-    }
-  } catch(e) {process.stderr.write(`[fable] decode failed ${sig}: ${String(e)}\n`);}
+  }
 }
-function drain() {
-  while(active<3 && queue.length) {
-    const sig=queue.shift()!;active++;
-    void processSignature(sig).finally(()=>{active--;drain();});
+
+async function drain() {
+  while (!shuttingDown) {
+    const signature = queue.shift();
+    if (signature) await processSignature(signature);
+    else await sleep(200);
   }
 }
 function connect() {
-  if(shuttingDown)return;
-  ws=new WebSocket(wsUrl);
-  ws.addEventListener("open",()=>ws?.send(JSON.stringify({jsonrpc:"2.0",id:1,method:"logsSubscribe",params:[{mentions:[PUMP_PROGRAM_ID]},{commitment:"confirmed"}]})));
-  ws.addEventListener("message",e=>{
-    try {
-      const msg=JSON.parse(String(e.data)) as {error?:unknown;method?:string;params?:{result?:{value?:{signature?:string;err?:unknown}}}};
-      if(msg.error){process.stderr.write("[fable] subscription error "+JSON.stringify(msg.error)+"\n");return;}
-      const v=msg.params?.result?.value;
-      if(msg.method!=="logsNotification" || !v?.signature || v.err || seen.has(v.signature))return;
-      seen.add(v.signature);
-      if(seen.size>100000)seen.clear();
-      if(queue.length>10000){process.stderr.write("[fable] queue overflow: dropped signature, backfill required\n");return;}
-      queue.push(v.signature);drain();
-    }catch(err){process.stderr.write("[fable] bad WS message "+String(err)+"\n");}
+  if (shuttingDown) return;
+  const socket = new WebSocket(wsUrl);
+  ws = socket;
+  socket.addEventListener("open", () => {
+    socket.send(JSON.stringify({
+      jsonrpc: "2.0", id: 1, method: "logsSubscribe",
+      params: [{ mentions: [PUMP_PROGRAM_ID] }, { commitment: "confirmed" }]
+    }));
+    process.stderr.write("[fable] connected to Solana logs stream\n");
   });
-  ws.addEventListener("error",()=>process.stderr.write("[fable] websocket error\n"));
-  ws.addEventListener("close",()=>{if(!shuttingDown){process.stderr.write("[fable] websocket disconnected; historical gap recovery required\n");setTimeout(connect,3000);}});
+  socket.addEventListener("message", (event) => {
+    try {
+      const message = JSON.parse(String(event.data)) as {
+        method?: string;
+        error?: { message?: string };
+        params?: { result?: { value?: { signature?: string; err?: unknown; logs?: string[] } } };
+      };
+      if (message.error) {
+        process.stderr.write("[fable] logs subscription rejected: " + (message.error.message ?? "unknown") + "\n");
+        return;
+      }
+      const value = message.params?.result?.value;
+      if (message.method !== "logsNotification" || !value?.signature || value.err) return;
+      // Only fetch transactions whose logs indicate token creation.
+      if (!value.logs?.some(line => /Instruction: Create(?:V2)?(?:\\b|$)/i.test(line))) return;
+      if (seen.has(value.signature)) return;
+      seen.add(value.signature);
+      if (seen.size > 50000) seen.clear();
+      if (queue.length >= 1000) {
+        dropped++;
+        if (dropped % 100 === 1) process.stderr.write(`[fable] queue saturated: ${dropped} dropped; historical backfill required\n`);
+        return;
+      }
+      queue.push(value.signature);
+    } catch {
+      process.stderr.write("[fable] malformed notification\n");
+    }
+  });
+  socket.addEventListener("error", () => process.stderr.write("[fable] websocket error\n"));
+  socket.addEventListener("close", () => {
+    if (!shuttingDown) {
+      process.stderr.write("[fable] stream disconnected; historical backfill required\n");
+      setTimeout(connect, 5000);
+    }
+  });
 }
-process.on("SIGINT",()=>{shuttingDown=true;ws?.close();process.exit(0);});
+process.on("SIGTERM", () => { shuttingDown = true; ws?.close(); });
+process.on("SIGINT", () => { shuttingDown = true; ws?.close(); });
+void drain();
 connect();
