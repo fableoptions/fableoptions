@@ -5,6 +5,7 @@ import { analyzeOption, validatePayoffInput, type PayoffInput } from "./options/
 import { theoreticalCappedOption, validateModelInput, type ModelInput } from "./options/pricing.js";
 import { RfqStore } from "./options/rfq-store.js";
 import { venueReadiness } from "./options/venue-readiness.js";
+import { venueCandidateReport } from "./options/venue-candidates.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
 await store.init();
 const rfqStore = new RfqStore(process.env.DATABASE_URL ?? "");
@@ -61,6 +62,11 @@ const server = createServer(async (request, response) => {
         response.writeHead(400);response.end(JSON.stringify({error:"invalid_input",details:errors}));return;
       }
       response.writeHead(200);response.end(JSON.stringify(theoreticalCappedOption(input)));return;
+    }
+    if (path === "/v1/options/venue-candidates") {
+      response.writeHead(200);
+      response.end(JSON.stringify(venueCandidateReport()));
+      return;
     }
     if (path === "/v1/options/venue-readiness") {
       response.writeHead(200);
