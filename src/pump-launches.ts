@@ -43,7 +43,7 @@ async function rpc(method: string, params: unknown[]): Promise<unknown> {
 async function processSignature(signature: string) {
   for (let attempt = 0; attempt < 4 && !shuttingDown; attempt++) {
     try {
-      const result = await rpc("getTransaction", [signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]);
+      const result = await rpc("getTransaction", [signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 1 }]);
       if (result) {
         for (const launch of decodeLaunches(result as ParsedTx)) {
           process.stdout.write(JSON.stringify({
