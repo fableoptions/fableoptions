@@ -205,15 +205,31 @@ main > .orbit-section:first-child .orbit-actions button{font-size:13px;padding:1
 }
 @media(prefers-reduced-motion:reduce){.orbit-token,.orbit-coin-art{transition:none!important}}
 
-/* Pipo gradient from the supplied 21st.dev recipe, adapted to static HTML.
-   It sits behind the wireframe globe, not over token images or controls. */
-.orbit-stage .pipo-gradient{
-  position:absolute;inset:0;overflow:hidden;pointer-events:none;
-  z-index:0;container-type:size;isolation:isolate;
-  border-radius:clamp(12px,2vw,28px);
+/* Full-bleed Pipo background for the entire homepage hero.
+   No visible rectangular gradient layer or clipping at the globe's edges. */
+main > .orbit-section:first-child {
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  background:#fafbf7;
 }
-.orbit-stage .pipo-gradient-colors{
-  position:absolute;inset:-16cqmin;
+main > .orbit-section:first-child > .pipo-gradient {
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  pointer-events:none;
+  z-index:0;
+  container-type:size;
+  border-radius:0;
+  /* Fade into following content instead of ending with a hard color seam. */
+  -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 77%,transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 0%,#000 77%,transparent 100%);
+}
+main > .orbit-section:first-child > .pipo-gradient .pipo-gradient-colors {
+  position:absolute;
+  inset:-16cqmin;
   filter:blur(8cqmin);
   background-color:#FAF9EF;
   background-image:
@@ -224,17 +240,24 @@ main > .orbit-section:first-child .orbit-actions button{font-size:13px;padding:1
   background-size:120px 120px,auto,auto,auto;
   background-blend-mode:overlay,normal,normal,normal;
 }
-.orbit-stage .pipo-gradient-grain{
+main > .orbit-section:first-child > .pipo-gradient .pipo-gradient-grain {
   position:absolute;inset:0;width:100%;height:100%;
   opacity:.305;mix-blend-mode:overlay;
 }
-.orbit-stage .orbit-wireframe{z-index:1}
-.orbit-stage .orbit-frame{z-index:1}
-.orbit-stage .orbit-dots{z-index:2}
-.orbit-stage .orbit-card{z-index:8}
-@supports not (container-type:size){
-  .orbit-stage .pipo-gradient-colors{inset:-18%;filter:blur(64px)}
+main > .orbit-section:first-child > :not(.pipo-gradient) {
+  position:relative;
+  z-index:1;
 }
-@media (prefers-contrast:more){
-  .orbit-stage .pipo-gradient{opacity:.68}
+/* Remove the old boxed frame: only the free-floating sphere is visible. */
+main > .orbit-section:first-child .orbit-frame { display:none !important; }
+.orbit-stage .orbit-wireframe { z-index:1; }
+.orbit-stage .orbit-dots { z-index:2; }
+.orbit-stage .orbit-card { z-index:8; }
+@supports not (container-type:size) {
+  main > .orbit-section:first-child > .pipo-gradient .pipo-gradient-colors {
+    inset:-18%;filter:blur(64px);
+  }
+}
+@media (prefers-contrast:more) {
+  main > .orbit-section:first-child > .pipo-gradient {opacity:.68;}
 }
