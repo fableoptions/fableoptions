@@ -90,6 +90,8 @@ while(active){
               riskSignals:audit.riskSignals,
               beneficialOwnersVerified:false,bundleProven:false
             })+"\\n");
+          }else{
+            process.stderr.write("[fable] ownership audit idle: no qualifying recent $100K+ token\\n");
           }
         }catch(error){
           // A failed RPC check cannot mark ownership safe or unlocked.
