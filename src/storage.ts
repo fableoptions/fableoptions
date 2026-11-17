@@ -131,12 +131,21 @@ export class FableStore {
   async recentCrossings(limit=50) {
     const result = await this.pool.query(
       `SELECT c.id,c.mint,l.symbol,l.token_name,c.event_type,c.previous_market_cap_usd,
-         c.market_cap_usd,c.pool_liquidity_usd,c.pool_address,c.observed_at,c.price_source
+         c.market_cap_usd,c.pool_liquidity_usd,c.pool_address,c.observed_at,c.price_source,
+         l.first_seen,l.last_price_at,l.latest_market_cap_usd,l.latest_liquidity_usd,l.latest_price_source
          FROM crossing_events c JOIN launches l ON l.mint=c.mint
          ORDER BY c.id DESC LIMIT $1`,
       [Math.min(Math.max(limit, 1), 100)]
     );
     return result.rows;
+  }
+  async tokenRiskRow(mint: string) {
+    const result=await this.pool.query(
+      `SELECT mint,symbol,token_name,first_seen,last_price_at,
+        latest_market_cap_usd,latest_liquidity_usd,latest_price_source
+       FROM launches WHERE mint=$1 LIMIT 1`,[mint]
+    );
+    return result.rows[0]??null;
   }
   async recentLaunches(limit=50) {
     const result = await this.pool.query(
