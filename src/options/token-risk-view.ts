@@ -12,6 +12,14 @@ export interface TrackedRiskRow {
   latest_liquidity_usd?:number|null;
   latest_price_source?:string|null;
   latest_anomaly_at?:string|Date|null;
+  ownership_observed_at?:string|Date|null;
+  top_account_pct?:number|null;
+  top_ten_account_pct?:number|null;
+  distinct_visible_owners?:number|null;
+  repeated_owner_accounts?:number|null;
+  mint_authority_revoked?:boolean|null;
+  freeze_authority_revoked?:boolean|null;
+  ownership_risk_signals?:string[]|null;
 }
 function timestamp(value:string|Date|null|undefined):string|null {
   if(value instanceof Date)return Number.isFinite(value.getTime())?value.toISOString():null;
@@ -30,16 +38,30 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
     holderAccountsClassified:false,
     launchBundleEvidence:"unknown",
     suspiciousVolumeEvidence:"unknown",
-    mintAuthorityRevoked:null,
-    freezeAuthorityRevoked:null,
+    mintAuthorityRevoked:row.mint_authority_revoked??null,
+    freezeAuthorityRevoked:row.freeze_authority_revoked??null,
     independentPriceCheck:false,
     recentAnomalyAt:timestamp(row.latest_anomaly_at)
   };
+  const assessment=assessTokenRisk(input,now);
+  const signals=Array.isArray(row.ownership_risk_signals)?row.ownership_risk_signals:[];
+  const visibleConcentration=signals.some(x=>x.includes("EXCEEDS")||x.includes("SHARE_SAME"));
   return {
-    ...assessTokenRisk(input,now),
+    ...assessment,
+    reasons:[...new Set([...assessment.reasons,...(visibleConcentration?["UNCLASSIFIED_OWNERSHIP_CONCENTRATION_REVIEW"]:[])])],
+    ownershipEvidence:{
+      observedAt:timestamp(row.ownership_observed_at),
+      topTokenAccountPct:row.top_account_pct??null,
+      topTenTokenAccountsPct:row.top_ten_account_pct??null,
+      distinctVisibleOwners:row.distinct_visible_owners??null,
+      repeatedOwnerAccounts:row.repeated_owner_accounts??null,
+      riskSignals:signals,
+      beneficialOwnersVerified:false,bundleProven:false
+    },
     dataLimitations:[
       "Token first_seen is the ingestion timestamp, not verified onchain creation time.",
-      "Holder classification, creator-linked wallets, bundles and volume integrity have not been independently established.",
+      "Observed largest token-account balances are not necessarily beneficial owners; pool vaults and custodians are unclassified.",
+      "Creator-linked wallets, same-slot buys and volume integrity have not been independently established.",
       "This data is never a trading authorization."
     ]
   };
