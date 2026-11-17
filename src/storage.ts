@@ -69,6 +69,13 @@ export class FableStore {
       );
       CREATE INDEX IF NOT EXISTS token_ownership_audits_checked_idx
         ON token_ownership_audits (checked_at);
+      CREATE TABLE IF NOT EXISTS token_ownership_audit_failures(
+        mint TEXT PRIMARY KEY REFERENCES launches(mint),
+        attempted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_error TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS token_launch_slot_audits (
         mint TEXT PRIMARY KEY REFERENCES launches(mint),
         slot BIGINT NOT NULL,
@@ -194,10 +201,12 @@ export class FableStore {
     const result=await this.pool.query(`
       SELECT l.mint,l.symbol FROM launches l
       LEFT JOIN token_ownership_audits a ON a.mint=l.mint
+      LEFT JOIN token_ownership_audit_failures f ON f.mint=l.mint
       WHERE l.first_seen>=now()-interval '2 days'
         AND l.latest_market_cap_usd>=300000
         AND l.last_price_at>now()-interval '10 minutes'
         AND (a.checked_at IS NULL OR a.checked_at<now()-interval '30 minutes')
+        AND (f.next_attempt_at IS NULL OR f.next_attempt_at<=now())
       ORDER BY a.checked_at ASC NULLS FIRST,l.last_price_at DESC
       LIMIT 1`);
     return result.rows[0]??null;
@@ -228,11 +237,20 @@ export class FableStore {
         audit.repeatedOwnerAccountCount,audit.mintAuthorityRevoked,
         audit.freezeAuthorityRevoked,JSON.stringify(audit.riskSignals)
       ]);
+    await this.pool.query("DELETE FROM token_ownership_audit_failures WHERE mint=$1",[audit.mint]);
   }
-  async recordOwnershipFailure(mint:string):Promise<void>{
-    // On RPC error, throttle this token's next market sample; do not record
-    // missing or failed holder data as verified evidence.
-    await this.deferToken(mint,120);
+  async recordOwnershipFailure(mint:string,reason:string):Promise<void>{
+    // Persist cooldown across restarts. A failed audit is NOT a safe audit.
+    await this.pool.query(`
+      INSERT INTO token_ownership_audit_failures(mint,attempts,last_error,next_attempt_at)
+      VALUES($1,1,$2,now()+interval '30 minutes')
+      ON CONFLICT(mint) DO UPDATE SET
+        attempted_at=now(),
+        attempts=LEAST(token_ownership_audit_failures.attempts+1,10),
+        last_error=excluded.last_error,
+        next_attempt_at=now() + LEAST(360,30*POWER(2,
+          LEAST(token_ownership_audit_failures.attempts,4))) * interval '1 minute'`,
+      [mint,reason.slice(0,100)]);
   }
   async dueLaunchSlotAudit():Promise<{mint:string;signature:string;slot:number}|null>{
     const r=await this.pool.query(`
