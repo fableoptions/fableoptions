@@ -1,4 +1,5 @@
 import pg from "pg";
+import { assessMarketJump } from "./market-anomaly.js";
 
 const { Pool } = pg;
 export type LaunchRecord = { mint: string; signature: string; slot: number; name: string; symbol: string; uri: string; instruction: string };
@@ -32,6 +33,9 @@ export class FableStore {
         next_poll_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       ALTER TABLE launches ADD COLUMN IF NOT EXISTS latest_price_source TEXT;
+      ALTER TABLE launches ADD COLUMN IF NOT EXISTS latest_anomaly_at TIMESTAMPTZ;
+      ALTER TABLE launches ADD COLUMN IF NOT EXISTS latest_anomaly_ratio DOUBLE PRECISION;
+      ALTER TABLE launches ADD COLUMN IF NOT EXISTS latest_anomaly_kind TEXT;
       CREATE INDEX IF NOT EXISTS launches_next_poll_idx ON launches (next_poll_at);
       CREATE TABLE IF NOT EXISTS crossing_events (
         id BIGSERIAL PRIMARY KEY,
@@ -108,16 +112,23 @@ export class FableStore {
         sample.observedAt.getTime() >= previousAt.getTime() &&
         sample.observedAt.getTime() - previousAt.getTime() <= 15*60*1000 &&
         oldSource === newSource;
+      const elapsedSeconds=previousAt instanceof Date ?
+        (sample.observedAt.getTime()-previousAt.getTime())/1000 : null;
+      const jump=assessMarketJump(oldCap,sample.marketCapUsd,elapsedSeconds,oldSource===newSource);
       const type: PriceEvent = sample.marketCapUsd >= thresholdUsd
         ? oldCap === null ? "first_seen_above"
-          : oldCap < thresholdUsd ? (recentPrevious ? "crossed_up" : "first_seen_above") : null
+          : oldCap < thresholdUsd ? (recentPrevious && !jump.anomalous ? "crossed_up" : "first_seen_above") : null
         : null;
       await c.query(
         `UPDATE launches SET latest_market_cap_usd=$2, latest_liquidity_usd=$3,
          latest_pool=$4, last_price_at=$5::timestamptz, latest_price_source=$7,
+         latest_anomaly_at=CASE WHEN $8::boolean THEN $5::timestamptz ELSE latest_anomaly_at END,
+         latest_anomaly_ratio=CASE WHEN $8::boolean THEN $9::double precision ELSE latest_anomaly_ratio END,
+         latest_anomaly_kind=CASE WHEN $8::boolean THEN $10::text ELSE latest_anomaly_kind END,
          next_poll_at=$5::timestamptz + $6::double precision * interval '1 second' WHERE mint=$1`,
         [sample.mint, sample.marketCapUsd, sample.poolLiquidityUsd, sample.poolAddress,
-         sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,newSource]
+         sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,newSource,
+         jump.anomalous,jump.ratio,jump.reason]
       );
       if (type) {
         await c.query(
@@ -139,7 +150,8 @@ export class FableStore {
     const result = await this.pool.query(
       `SELECT c.id,c.mint,l.symbol,l.token_name,c.event_type,c.previous_market_cap_usd,
          c.market_cap_usd,c.pool_liquidity_usd,c.pool_address,c.observed_at,c.price_source,
-         l.first_seen,l.last_price_at,l.latest_market_cap_usd,l.latest_liquidity_usd,l.latest_price_source
+         l.first_seen,l.last_price_at,l.latest_market_cap_usd,l.latest_liquidity_usd,l.latest_price_source,
+         l.latest_anomaly_at,l.latest_anomaly_ratio,l.latest_anomaly_kind
          FROM crossing_events c JOIN launches l ON l.mint=c.mint
          ORDER BY c.id DESC LIMIT $1`,
       [Math.min(Math.max(limit, 1), 100)]
@@ -149,7 +161,8 @@ export class FableStore {
   async tokenRiskRow(mint: string) {
     const result=await this.pool.query(
       `SELECT mint,symbol,token_name,first_seen,last_price_at,
-        latest_market_cap_usd,latest_liquidity_usd,latest_price_source
+        latest_market_cap_usd,latest_liquidity_usd,latest_price_source,
+        latest_anomaly_at,latest_anomaly_ratio,latest_anomaly_kind
        FROM launches WHERE mint=$1 LIMIT 1`,[mint]
     );
     return result.rows[0]??null;
@@ -157,7 +170,8 @@ export class FableStore {
   async recentLaunches(limit=50) {
     const result = await this.pool.query(
       `SELECT mint,symbol,token_name,signature,slot,first_seen,latest_market_cap_usd,
-         latest_liquidity_usd,last_price_at,latest_price_source FROM launches
+         latest_liquidity_usd,last_price_at,latest_price_source,
+         latest_anomaly_at,latest_anomaly_ratio,latest_anomaly_kind FROM launches
        ORDER BY first_seen DESC LIMIT $1`,[Math.min(Math.max(limit,1),100)]
     );
     return result.rows;
@@ -179,6 +193,7 @@ export class FableStore {
           AND latest_market_cap_usd >= 300000)::int AS fresh_above_300k,
         count(*) FILTER (WHERE latest_price_source = 'pump_bonding_curve_solana')::int AS curve_priced,
         count(*) FILTER (WHERE latest_price_source = 'dexscreener')::int AS dex_priced,
+        count(*) FILTER (WHERE latest_anomaly_at > now() - interval '1 hour')::int AS recent_anomalies,
         max(last_price_at) AS latest_sample_at FROM launches`),
       this.pool.query(`SELECT count(*)::int AS total,
         count(*) FILTER (WHERE observed_at > now() - interval '1 day')::int AS last_day,
