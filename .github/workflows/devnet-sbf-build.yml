@@ -3,7 +3,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'devnet/**'
+      - 'devnet/programs/**'
+      - 'devnet/scripts/**'
       - '.github/workflows/devnet-sbf-build.yml'
   workflow_dispatch:
 jobs:
@@ -19,13 +20,38 @@ jobs:
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
-      - name: Build Solana program into ELF, no network deployment
+      - name: Create disposable local-validator program identity (not a deployer secret)
+        run: |
+          solana-keygen new --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-program-keypair.json"
+          solana-keygen new --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-fee-payer.json"
+          PROGRAM_ID="$(solana address -k "$RUNNER_TEMP/fable-program-keypair.json")"
+          sed -i "s/Fg6PaFpoGXkYsidMpWxqSWYKuD8D7j7XQyVd7U5g4bD/$PROGRAM_ID/g" devnet/programs/fable_devnet_options/src/lib.rs devnet/Anchor.toml
+          echo "FABLE_TEST_PROGRAM_ID=$PROGRAM_ID" >> "$GITHUB_ENV"
+          echo "FABLE_TEST_PAYER_KEYPAIR=$RUNNER_TEMP/fable-fee-payer.json" >> "$GITHUB_ENV"
+      - name: Build Solana program into executable ELF
         run: |
           mkdir -p artifacts/sbf
           cargo build-sbf --manifest-path devnet/programs/fable_devnet_options/Cargo.toml --sbf-out-dir artifacts/sbf
           test -s artifacts/sbf/fable_devnet_options.so
           sha256sum artifacts/sbf/fable_devnet_options.so
-      - name: Upload unaudited devnet-only executable for future local tests
+      - name: Start isolated local validator and deploy disposable program
+        run: |
+          solana-test-validator --reset --ledger "$RUNNER_TEMP/fable-ledger" --rpc-port 8899 > "$RUNNER_TEMP/validator.log" 2>&1 &
+          for attempt in $(seq 1 90); do
+            if solana cluster-version --url http://127.0.0.1:8899 >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          solana cluster-version --url http://127.0.0.1:8899
+          solana airdrop 10 --url http://127.0.0.1:8899 --keypair "$RUNNER_TEMP/fable-fee-payer.json"
+          solana program deploy artifacts/sbf/fable_devnet_options.so \
+            --url http://127.0.0.1:8899 \
+            --keypair "$RUNNER_TEMP/fable-fee-payer.json" \
+            --program-id "$RUNNER_TEMP/fable-program-keypair.json"
+      - name: Execute actual Solana test-token escrow and payout transactions
+        run: |
+          npm install --no-audit --no-fund
+          npm run test:solana:local
+      - name: Upload unaudited local-validator test executable (no production deployment)
         uses: actions/upload-artifact@v4
         with:
           name: fable-devnet-sandbox-sbf
