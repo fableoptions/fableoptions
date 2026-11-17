@@ -9,6 +9,7 @@ import { fetchDexObservations, MarketRateLimitError } from "./market-provider.js
 import { fetchPumpCurveSnapshots, fetchSolUsd } from "./pump-curve-provider.js";
 import { fetchOwnershipAudit } from "./options/ownership-audit.js";
 import { fetchLaunchSlot } from "./options/launch-slot-analysis.js";
+import { fetchFundingLinks } from "./options/funding-links.js";
 const store=new FableStore(process.env.DATABASE_URL??"");
 await store.init();
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
@@ -110,6 +111,28 @@ while(active){
               rpcUrl,candidate.mint,candidate.slot,candidate.signature
             );
             await store.recordLaunchSlotAudit(report);
+            // Only attempt a small funding-history sample when the same-slot
+            // screen already raised review concerns and actual block time exists.
+            const candidates=(report.sampledAcquisitionWallets??[]).slice(0,2);
+            if(report.possibleCoordination==="needs_review" &&
+               report.launchUnixSeconds && candidates.length===2){
+              try{
+                const funding=await fetchFundingLinks(rpcUrl,candidate.mint,
+                  report.launchUnixSeconds,candidates);
+                await store.recordFundingReview(funding);
+                process.stderr.write("[fable] bounded funding review "+JSON.stringify({
+                  mint:candidate.mint,participantsExamined:funding.scannedWallets,
+                  matchingSources:funding.commonFundingSources.length,
+                  possibleSharedFunding:funding.possibleSharedFunding,
+                  commonControlProven:false
+                })+"\\n");
+              }catch(error){
+                const reason=error instanceof Error?error.message:"unknown";
+                try{await store.recordFundingFailure(candidate.mint,reason);}
+                catch(writeError){process.stderr.write("[fable] funding review write unavailable: "+String(writeError)+"\\n");}
+                process.stderr.write("[fable] funding history unavailable: "+reason+"\\n");
+              }
+            }
             process.stderr.write("[fable] launch slot signal "+JSON.stringify({
               mint:candidate.mint,slot:report.slot,
               positiveBalanceTransactions:report.transactionCountWithPositiveBalanceDelta,
