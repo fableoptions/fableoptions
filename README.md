@@ -31,6 +31,10 @@ Run `npm run monitor` to discover new Solana pools and keep a JSON snapshot at `
 
 The persistent monitor is a separate experimental entry point from `npm run scanner`. Set `STATE_FILE` to change its snapshot path. Do not run multiple writers on the same file. No verified Pump.fun provenance or options trading is implemented.
 
+## Direct program activity (experimental)
+
+`npm run pump:stream` listens for transactions mentioning a configured Solana program. You must supply `SOLANA_WS_URL` and an independently verified `PUMP_PROGRAM_ID`. This is **not yet a decoded Pump.fun launch indexer**. See [docs/pump-indexer.md](docs/pump-indexer.md).
+
 ## Next gates
 
 1. Verify the options venue's mainnet deployment, independent audits, SDK, token eligibility and funded counterparties.
