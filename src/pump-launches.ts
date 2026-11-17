@@ -1,6 +1,10 @@
 import { decodeLaunches, PUMP_PROGRAM_ID, type ParsedTx } from "./pump-decode.js";
+import { FableStore } from "./storage.js";
 
 const key = process.env.HELIUS_API_KEY;
+const store = process.env.DATABASE_URL ? new FableStore(process.env.DATABASE_URL) : null;
+if (store) await store.init();
+else process.stderr.write("[fable] DATABASE_URL absent; decoded launches will NOT be persisted\n");
 const wsUrl = process.env.SOLANA_WS_URL ?? (key ? `wss://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}` : "");
 const rpcUrl = process.env.SOLANA_RPC_URL ?? (key ? `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}` : "");
 if (!wsUrl.startsWith("wss://") || !rpcUrl.startsWith("https://")) throw new Error("Configure HELIUS_API_KEY or secure Solana RPC URLs");
@@ -46,6 +50,7 @@ async function processSignature(signature: string) {
       const result = await rpc("getTransaction", [signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 1 }]);
       if (result) {
         for (const launch of decodeLaunches(result as ParsedTx)) {
+          if (store) await store.recordLaunch(launch);
           process.stdout.write(JSON.stringify({
             event: "pump_launch", ...launch, verifiedInstruction: true,
             marketCapUsd: null, optionsAvailable: false
@@ -119,7 +124,7 @@ function connect() {
     }
   });
 }
-process.on("SIGTERM", () => { shuttingDown = true; ws?.close(); });
-process.on("SIGINT", () => { shuttingDown = true; ws?.close(); });
+process.on("SIGTERM", () => { shuttingDown = true; ws?.close(); void store?.close(); });
+process.on("SIGINT", () => { shuttingDown = true; ws?.close(); void store?.close(); });
 void drain();
 connect();
