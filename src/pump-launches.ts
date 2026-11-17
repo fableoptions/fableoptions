@@ -2,6 +2,7 @@ import pg from "pg";
 import { decodeLaunches, PUMP_PROGRAM_ID, type ParsedTx } from "./pump-decode.js";
 import { FableStore } from "./storage.js";
 import { SignatureQueue } from "./ingest-queue.js";
+import { verifyPumpTransaction } from "./pump-verification.js";
 
 /**
  * Mainnet activity subscriber with durable transaction job tracking.
@@ -51,10 +52,16 @@ async function handleSignature(signature:string){
   ]);
   if(!transaction)throw new Error("TRANSACTION_NOT_AVAILABLE");
   const launches=decodeLaunches(transaction as ParsedTx);
+  const check=verifyPumpTransaction(transaction as ParsedTx);
+  const approved=new Set(check.verifiedLaunches.map(x=>x.mint));
+  if(check.excludedLaunches.length){
+    process.stderr.write("[fable] rejected inconsistent launch instruction for "+signature+"\n");
+  }
   for(const launch of launches){
+    if(!approved.has(launch.mint)) continue;
     const first=await store.recordLaunch(launch);
     if(first)process.stdout.write(JSON.stringify({
-      event:"pump_launch",...launch,verifiedInstruction:true,
+      event:"pump_launch",...launch,verifiedInstruction:true,accountKeysConsistent:true,
       marketCapUsd:null,optionsAvailable:false
     })+"\n");
   }
