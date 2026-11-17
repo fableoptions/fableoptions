@@ -32,5 +32,6 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run check
       - run: node --check web/app.js
+      - run: node --check web/orbit.js
       - run: npm test
       - run: npm run test:rfq-integration
