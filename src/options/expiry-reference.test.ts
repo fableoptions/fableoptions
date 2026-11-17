@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {assessExpiryCapWindow,type CapObservation} from "./expiry-reference.js";
+import {assessExpiryCapWindow,assessExpiryTokenPriceWindow,type CapObservation} from "./expiry-reference.js";
 const mint="31qACV9dPCTbcRky4mv4WRnFFMKy2infA41KHDoTpump";
 const end=new Date("2026-11-17T15:00:00Z");
 const start=new Date(end.getTime()-600000);
@@ -48,4 +48,27 @@ test("bonding-curve market cap and missing liquidity never become expiry settlem
 });
 test("rejects invalid windows rather than guessing coverage",()=>{
  assert.throws(()=>assessExpiryCapWindow(mint,samples(),start,new Date(start.getTime()+60_000)),/invalid_reference_window/);
+});
+
+test("token unit price is distinct from cap and remains unexecutable",()=>{
+ const rows=samples().map(o=>({...o,tokenPriceUsd:0.0004}));
+ const result=assessExpiryTokenPriceWindow(mint,rows,start,end);
+ assert.equal(result.status,"sampled_reference_only");
+ assert.ok(Math.abs(result.indicativeTokenPriceTwapUsd!-0.0004)<1e-10);
+ assert.equal(result.validSettlementOracle,false);
+ assert.equal(result.payoutCalculable,false);
+ assert.equal(result.executable,false);
+});
+test("unit price is never inferred from market cap alone",()=>{
+ const result=assessExpiryTokenPriceWindow(mint,samples(500000),start,end);
+ assert.equal(result.status,"quarantined");
+ assert.equal(result.indicativeTokenPriceTwapUsd,null);
+ assert.ok(result.reasonCodes.includes("MISSING_OR_INVALID_TOKEN_UNIT_PRICE"));
+});
+test("one-token unit-price flash pump triggers quarantine",()=>{
+ const rows=samples().map(o=>({...o,tokenPriceUsd:0.0003}));
+ rows[5].tokenPriceUsd=0.003;
+ const result=assessExpiryTokenPriceWindow(mint,rows,start,end);
+ assert.equal(result.indicativeTokenPriceTwapUsd,null);
+ assert.ok(result.reasonCodes.includes("EXTREME_INTER_SAMPLE_CHANGE"));
 });
