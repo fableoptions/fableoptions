@@ -22,8 +22,8 @@ jobs:
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
       - name: Create disposable local-validator program identity (not a deployer secret)
         run: |
-          solana-keygen new --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-program-keypair.json"
-          solana-keygen new --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-fee-payer.json"
+          solana-keygen new --silent --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-program-keypair.json"
+          solana-keygen new --silent --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-fee-payer.json"
           PROGRAM_ID="$(solana address -k "$RUNNER_TEMP/fable-program-keypair.json")"
           sed -i "s/Fg6PaFpoGXkYsidMpWxqSWYKuD8D7j7XQyVd7U5g4bD/$PROGRAM_ID/g" devnet/programs/fable_devnet_options/src/lib.rs devnet/Anchor.toml
           echo "FABLE_TEST_PROGRAM_ID=$PROGRAM_ID" >> "$GITHUB_ENV"
