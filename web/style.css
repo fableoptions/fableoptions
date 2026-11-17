@@ -101,3 +101,28 @@ button.primary:hover{
 .playground-form input:focus-visible,.playground-form select:focus-visible{outline-color:#ad91ce}
 .demo-banner{background:#f8f2ff;border-color:#e6ddec;color:#857694}
 .demo-banner strong{color:#79618f}
+
+/* Fable's custom letter F is the mark itself, not a separate boxed icon. */
+.brand{
+  gap:0;
+  align-items:center;
+  white-space:nowrap;
+  letter-spacing:-1.15px;
+}
+.brand-letter-f{
+  display:block;
+  flex:0 0 auto;
+  width:.88em;
+  height:1.18em;
+  margin-left:-.065em;
+  margin-right:-.095em;
+  overflow:visible;
+  transform:translateY(.055em);
+}
+.brand .brand-name{
+  display:block;
+  letter-spacing:-.06em;
+}
+/* Ensure the entire wordmark scales together in footer and receipt. */
+footer .brand-letter-f{width:.88em;height:1.18em}
+.ticket .brand-letter-f{width:.88em;height:1.18em}
