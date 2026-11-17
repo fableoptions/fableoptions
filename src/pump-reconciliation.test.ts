@@ -23,10 +23,10 @@ test("history RPC excludes failed signatures and respects limit",async()=>{
   assert.equal(body.params[1].limit,2);
   return {ok:true,status:200,json:async()=>({result:[sig("a"),{...sig("b"),err:"failed"}]})};
  };
- const data=await fetchRecentPumpSignatures("https://example.com",2,fake as typeof fetch);
+ const data=await fetchRecentPumpSignatures("https://example.com",2,fake as unknown as typeof fetch);
  assert.equal(assessReconciliation(data,null,2).eligible,1);
 });
 test("rate limited recovery rejects without fake coverage",async()=>{
  const fake=async()=>({ok:false,status:429});
- await assert.rejects(fetchRecentPumpSignatures("https://example.com",2,fake as typeof fetch),/RATE_LIMIT/);
+ await assert.rejects(fetchRecentPumpSignatures("https://example.com",2,fake as unknown as typeof fetch),/RATE_LIMIT/);
 });
