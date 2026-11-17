@@ -14,7 +14,8 @@
     "api": "tsx src/discovery-api.ts",
     "backfill:pump": "tsx src/pump-backfill.ts",
     "rfq:api": "tsx src/options/rfq-api.ts",
-    "test:rfq-integration": "node --import tsx src/options/rfq-http.integration.ts"
+    "test:rfq-integration": "node --import tsx src/options/rfq-http.integration.ts",
+    "verify:pump:mainnet": "tsx src/pump-mainnet-validation.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
