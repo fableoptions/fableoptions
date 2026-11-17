@@ -23,4 +23,6 @@ jobs:
       - name: Test live Solana RPC sample
         env:
           VERIFY_SAMPLE_LIMIT: '12'
+          VERIFY_KNOWN_SIGNATURE: 'MupzqxZ856jzjH3EUYymPCwVyYGjHzQ5raxjR8fACwi5eogbvpFMr5thyQiHLfoy8ha17PoJyjZrm2rmTzPH8qi'
+          VERIFY_KNOWN_MINT: '31qACV9dPCTbcRky4mv4WRnFFMKy2infA41KHDoTpump'
         run: npm run verify:pump:mainnet
