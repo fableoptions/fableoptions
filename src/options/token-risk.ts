@@ -22,6 +22,7 @@ export type RiskInput = {
   mintAuthorityRevoked: boolean | null;
   freezeAuthorityRevoked: boolean | null;
   independentPriceCheck: boolean;
+  recentAnomalyAt?: string | null;
 };
 export type RiskAssessment = {
   mint: string;
@@ -80,6 +81,13 @@ export function assessTokenRisk(input:RiskInput, now=new Date()): RiskAssessment
      input.topTenConcentrationPct===null)review.push("OWNERSHIP_CONCENTRATION_UNVERIFIED");
   if(input.mintAuthorityRevoked!==true)review.push("MINT_AUTHORITY_NOT_CONFIRMED_SAFE");
   if(input.freezeAuthorityRevoked!==true)review.push("FREEZE_AUTHORITY_NOT_CONFIRMED_SAFE");
+  if(input.recentAnomalyAt){
+    const anomalyTime=Date.parse(input.recentAnomalyAt);
+    if(Number.isFinite(anomalyTime) && anomalyTime<=now.getTime()+30000 &&
+       now.getTime()-anomalyTime<=60*60*1000){
+      review.push("RECENT_EXTREME_MARKET_CAP_MOVE");
+    }
+  }
   if(!input.independentPriceCheck)review.push("INDEPENDENT_PRICE_VALIDATION_MISSING");
   const reasons=[...new Set([...blockers,...review])];
   return {
