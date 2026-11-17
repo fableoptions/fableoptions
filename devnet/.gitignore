@@ -1,0 +1,9 @@
+target/
+.anchor/
+test-ledger/
+*.so
+.env
+*.pem
+*-keypair.json
+wallet.json
+program-id.json
