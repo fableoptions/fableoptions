@@ -4,7 +4,7 @@
  * Images come from Pump's exact-mint metadata endpoint and are constrained by
  * file size, response MIME, and a public content-host allowlist.
  */
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 const MINTS = [
   "98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump",
@@ -18,7 +18,7 @@ const allowed = (hostname) => [
   "ipfs.io", "gateway.pinata.cloud", "pump.mypinata.cloud",
   "cf-ipfs.com", "arweave.net", "gateway.irys.xyz",
   "image.pump.fun", "pump.fun", "ipfs.filebase.io",
-  "metadata.pumparc.fun", "cf-ipfs.com", "nftstorage.link"
+  "metadata.pumparc.fun", "nftstorage.link", "cdn.dexscreener.com", "dd.dexscreener.com", "coin-images.coingecko.com", "coin-images.geckoterminal.com", "assets.coingecko.com"
 ].includes(hostname.toLowerCase());
 const http = async (url, accept, maxBytes) => {
   const u = new URL(url);
@@ -48,15 +48,45 @@ const http = async (url, accept, maxBytes) => {
   } finally {reader.releaseLock();}
   return {buf:Buffer.concat(chunks),type:(response.headers.get("content-type")||"").split(";")[0]};
 };
-const source = async (mint) => {
-  const u="https://frontend-api-v3.pump.fun/coins-v2/"+mint;
-  const response = await fetch(u,{headers:{accept:"application/json"},signal:AbortSignal.timeout(13000)});
-  if (!response.ok) throw new Error("pump_metadata_http_"+response.status);
+const pumpSource=async mint=>{
+  const response=await fetch("https://frontend-api-v3.pump.fun/coins-v2/"+mint,{
+    headers:{accept:"application/json"},signal:AbortSignal.timeout(12000)
+  });
+  if(!response.ok)throw new Error("pump_status_"+response.status);
   const data=await response.json();
-  if (data?.mint !== mint) throw new Error("mint_mismatch");
-  const raw = data.image_uri ?? data.imageUrl;
-  if (!raw) throw new Error("missing_image_uri");
-  return raw;
+  if(data?.mint!==mint)throw new Error("mint_mismatch");
+  if(!data.image_uri)throw new Error("pump_missing_image_uri");
+  return data.image_uri;
+};
+const dexSource=async mint=>{
+  const response=await fetch("https://api.dexscreener.com/tokens/v1/solana/"+mint,{
+    headers:{accept:"application/json"},signal:AbortSignal.timeout(12000)
+  });
+  if(!response.ok)throw new Error("dex_status_"+response.status);
+  const pairs=await response.json();
+  if(!Array.isArray(pairs))throw new Error("invalid_dex_shape");
+  const matched=pairs.filter(p=>p?.chainId==="solana"&&p?.baseToken?.address===mint);
+  matched.sort((a,b)=>Number(b?.liquidity?.usd||0)-Number(a?.liquidity?.usd||0));
+  const image=matched.map(p=>p?.info?.imageUrl).find(v=>typeof v==="string"&&v.startsWith("https://"));
+  if(!image)throw new Error("dex_missing_artwork");
+  return image;
+};
+const geckoSource=async mint=>{
+  const response=await fetch("https://api.geckoterminal.com/api/v2/networks/solana/tokens/"+mint+"/info",{
+    headers:{accept:"application/json"},signal:AbortSignal.timeout(12000)
+  });
+  if(!response.ok)throw new Error("gecko_status_"+response.status);
+  const data=await response.json();
+  const image=data?.data?.attributes?.image_url;
+  if(typeof image!=="string"||!image.startsWith("https://"))throw new Error("gecko_missing_artwork");
+  return image;
+};
+const source=async mint=>{
+  const errors=[];
+  for(const provider of [pumpSource,dexSource,geckoSource]){
+    try{return await provider(mint);}catch(e){errors.push(String(e).slice(0,80));}
+  }
+  throw new Error("all_metadata_sources_failed:"+errors.join("; "));
 };
 await mkdir(TARGET,{recursive:true});
 const manifest={schemaVersion:1,source:"pump-fun-exact-mint-metadata",images:{}};
