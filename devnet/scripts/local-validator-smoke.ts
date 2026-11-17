@@ -87,13 +87,13 @@ async function main(){
  };
  const expiry=BigInt(Math.floor(Date.now()/1000)+75);
  const {p,v}=await makeOffer(1n,expiry);
- if((await getAccount(connection,v)).amount!==100_000_000n)
+ if((await getAccount(connection,v,"confirmed")).amount!==100_000_000n)
    throw new Error("writer_collateral_not_locked");
  await send("buy_offer",ix("buy_offer",[
    k(buyer.publicKey,true,true),k(config),k(testMint),k(p,false,true),
-   k(buyerToken,false,true),k(writerToken,false,true),k(v),k(TOKEN_PROGRAM_ID)
+   k(buyerToken,false,true),k(writerToken,false,true),k(v,false,true),k(TOKEN_PROGRAM_ID)
  ]),[buyer]);
- if((await getAccount(connection,v)).amount!==120_000_000n)
+ if((await getAccount(connection,v,"confirmed")).amount!==120_000_000n)
    throw new Error("buyer_premium_not_escrowed");
 
  // Exercise unauthorized mock price rejection before testing valid oracle.
@@ -115,12 +115,12 @@ async function main(){
   k(writer.publicKey,false,true),k(TOKEN_PROGRAM_ID)
  ]);
  await send("settle_mock",settle,[]);
- const buyerAfter=(await getAccount(connection,buyerToken)).amount;
- const writerAfter=(await getAccount(connection,writerToken)).amount;
+ const buyerAfter=(await getAccount(connection,buyerToken,"confirmed")).amount;
+ const writerAfter=(await getAccount(connection,writerToken,"confirmed")).amount;
  if(buyerAfter!==180_000_000n||writerAfter!==120_000_000n)
   throw new Error("unexpected_onchain_usdc_payout"+
    JSON.stringify({buyer:String(buyerAfter),writer:String(writerAfter)}));
- if(await connection.getAccountInfo(v)!==null)
+ if(await connection.getAccountInfo(v,"confirmed")!==null)
   throw new Error("vault_not_closed");
  denied=false;
  try{await send("double_settle",settle,[]);}catch{denied=true;}
@@ -133,9 +133,9 @@ async function main(){
    k(writer.publicKey,true,true),k(writerToken,false,true),
    k(buyerToken,false,true),k(second.v,false,true),k(TOKEN_PROGRAM_ID)
  ]),[writer]);
- if((await getAccount(connection,writerToken)).amount!==120_000_000n)
+ if((await getAccount(connection,writerToken,"confirmed")).amount!==120_000_000n)
   throw new Error("unsold_collateral_not_refunded");
- if(await connection.getAccountInfo(second.v)!==null)
+ if(await connection.getAccountInfo(second.v,"confirmed")!==null)
   throw new Error("cancelled_vault_not_closed");
  console.log(JSON.stringify({
   status:"PASSED_LOCAL_VALIDATOR",
