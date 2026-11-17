@@ -47,3 +47,11 @@ test("null historical data is not treated as no bundle",async()=>{
  await assert.rejects(fetchLaunchSlot("https://example.com",mint,123,"creation",
   fake as unknown as typeof fetch),/unavailable/);
 });
+
+test("rejects oversized historical block without parsing it",async()=>{
+ const fake=async()=>new Response("{}",{
+  status:200,headers:{"content-length":String(9*1024*1024)}
+ });
+ await assert.rejects(fetchLaunchSlot("https://example.com",mint,123,"creation",
+  fake as unknown as typeof fetch),/slot_response_too_large/);
+});
