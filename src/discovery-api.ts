@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 import { FableStore } from "./storage.js";
 import { analyzeOption, validatePayoffInput, type PayoffInput } from "./options/analytics.js";
+import { theoreticalCappedOption, validateModelInput, type ModelInput } from "./options/pricing.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
 await store.init();
 const port = Number(process.env.PORT ?? 3000);
@@ -37,6 +38,25 @@ const server = createServer(async (request, response) => {
       response.writeHead(200);
       response.end(JSON.stringify(analyzeOption(input)));
       return;
+    }
+    if (path === "/v1/options/model") {
+      const q=url.searchParams;
+      const required=["side","spotPriceUsd","strikePriceUsd","units","grossPayoutCapUsd","expirationSeconds","assumedAnnualVolatility"];
+      const input:ModelInput={
+        side:q.get("side") as ModelInput["side"],
+        spotPriceUsd:Number(q.get("spotPriceUsd")),
+        strikePriceUsd:Number(q.get("strikePriceUsd")),
+        units:Number(q.get("units")),
+        grossPayoutCapUsd:Number(q.get("grossPayoutCapUsd")),
+        expirationSeconds:Number(q.get("expirationSeconds")),
+        assumedAnnualVolatility:Number(q.get("assumedAnnualVolatility")),
+        assumedAnnualRiskFreeRate:q.has("assumedAnnualRiskFreeRate")?Number(q.get("assumedAnnualRiskFreeRate")):0
+      };
+      const errors=required.filter(k=>!q.has(k)||q.get(k)==="").map(k=>"missing_"+k).concat(validateModelInput(input));
+      if(errors.length) {
+        response.writeHead(400);response.end(JSON.stringify({error:"invalid_input",details:errors}));return;
+      }
+      response.writeHead(200);response.end(JSON.stringify(theoreticalCappedOption(input)));return;
     }
     if (path === "/v1/discovery") {
       const data = await store.recentCrossings();
