@@ -1,6 +1,7 @@
 import pg from "pg";
 import { assessMarketJump } from "./market-anomaly.js";
 import type { OwnershipAudit } from "./options/ownership-audit.js";
+import type { SlotAcquisitionSignal } from "./options/launch-slot-analysis.js";
 
 const { Pool } = pg;
 export type LaunchRecord = { mint: string; signature: string; slot: number; name: string; symbol: string; uri: string; instruction: string };
@@ -68,6 +69,19 @@ export class FableStore {
       );
       CREATE INDEX IF NOT EXISTS token_ownership_audits_checked_idx
         ON token_ownership_audits (checked_at);
+      CREATE TABLE IF NOT EXISTS token_launch_slot_audits (
+        mint TEXT PRIMARY KEY REFERENCES launches(mint),
+        slot BIGINT NOT NULL,
+        observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        analysis_status TEXT NOT NULL CHECK(analysis_status IN ('partial','unavailable')),
+        transactions_examined INTEGER,
+        positive_delta_transactions INTEGER,
+        distinct_reported_owners INTEGER,
+        repeated_owner_accounts INTEGER,
+        possible_coordination TEXT,
+        error_message TEXT,
+        bundle_proven BOOLEAN NOT NULL DEFAULT FALSE CHECK(bundle_proven=FALSE)
+      );
     `);
     } finally {
       try { await client.query("SELECT pg_advisory_unlock(428719002)"); }
@@ -220,6 +234,56 @@ export class FableStore {
     // missing or failed holder data as verified evidence.
     await this.deferToken(mint,120);
   }
+  async dueLaunchSlotAudit():Promise<{mint:string;signature:string;slot:number}|null>{
+    const r=await this.pool.query(`
+      SELECT l.mint,l.signature,l.slot FROM launches l
+      LEFT JOIN token_launch_slot_audits a ON a.mint=l.mint
+      WHERE l.first_seen>=now()-interval '2 days'
+        AND l.latest_market_cap_usd>=300000
+        AND l.last_price_at>now()-interval '15 minutes'
+        AND (a.observed_at IS NULL OR (
+          a.analysis_status='unavailable' AND a.observed_at<now()-interval '6 hours'
+        ))
+      ORDER BY l.latest_market_cap_usd DESC LIMIT 1`);
+    const x=r.rows[0];
+    if(!x)return null;
+    const slot=Number(x.slot);
+    return Number.isSafeInteger(slot)&&slot>0?{mint:x.mint,signature:x.signature,slot}:null;
+  }
+  async recordLaunchSlotAudit(audit:SlotAcquisitionSignal):Promise<void>{
+    if(audit.bundlesProven!==false||audit.fraudProven!==false||
+       !Number.isSafeInteger(audit.slot)||audit.slot<=0)throw new Error("unverified_bundle_claim");
+    await this.pool.query(`
+      INSERT INTO token_launch_slot_audits(
+        mint,slot,analysis_status,transactions_examined,
+        positive_delta_transactions,distinct_reported_owners,
+        repeated_owner_accounts,possible_coordination,bundle_proven
+      ) VALUES($1,$2,'partial',$3,$4,$5,$6,$7,FALSE)
+      ON CONFLICT(mint) DO UPDATE SET
+        slot=excluded.slot,observed_at=now(),analysis_status='partial',
+        transactions_examined=excluded.transactions_examined,
+        positive_delta_transactions=excluded.positive_delta_transactions,
+        distinct_reported_owners=excluded.distinct_reported_owners,
+        repeated_owner_accounts=excluded.repeated_owner_accounts,
+        possible_coordination=excluded.possible_coordination,
+        error_message=NULL,bundle_proven=FALSE
+      WHERE token_launch_slot_audits.analysis_status='unavailable'`,[
+      audit.mint,audit.slot,audit.transactionsExamined,
+      audit.transactionCountWithPositiveBalanceDelta,audit.distinctReportedOwners,
+      audit.ownersWithMultiplePositiveDeltaTransactions,audit.possibleCoordination
+    ]);
+  }
+  async recordLaunchSlotFailure(mint:string,slot:number,message:string):Promise<void>{
+    await this.pool.query(`
+      INSERT INTO token_launch_slot_audits(mint,slot,analysis_status,error_message)
+      VALUES($1,$2,'unavailable',$3)
+      ON CONFLICT(mint) DO UPDATE SET
+        observed_at=now(),analysis_status='unavailable',
+        error_message=excluded.error_message,bundle_proven=FALSE
+      WHERE token_launch_slot_audits.analysis_status='unavailable'`,[
+        mint,slot,message.slice(0,120)
+      ]);
+  }
   async tokenRiskRow(mint: string) {
     const result=await this.pool.query(
       `SELECT l.mint,l.symbol,l.token_name,l.first_seen,l.last_price_at,
@@ -228,8 +292,13 @@ export class FableStore {
         a.observed_at AS ownership_observed_at,a.top_account_pct,a.top_ten_account_pct,
         a.distinct_visible_owners,a.repeated_owner_accounts,
         a.mint_authority_revoked,a.freeze_authority_revoked,
-        a.risk_signals AS ownership_risk_signals
+        a.risk_signals AS ownership_risk_signals,
+        x.analysis_status AS slot_analysis_status,
+        x.positive_delta_transactions,x.distinct_reported_owners,
+        x.repeated_owner_accounts AS slot_repeated_owner_accounts,
+        x.possible_coordination AS slot_possible_coordination
        FROM launches l LEFT JOIN token_ownership_audits a ON a.mint=l.mint
+       LEFT JOIN token_launch_slot_audits x ON x.mint=l.mint
        WHERE l.mint=$1 LIMIT 1`,[mint]
     );
     return result.rows[0]??null;
@@ -242,8 +311,13 @@ export class FableStore {
          a.observed_at AS ownership_observed_at,a.top_account_pct,a.top_ten_account_pct,
          a.distinct_visible_owners,a.repeated_owner_accounts,
          a.mint_authority_revoked,a.freeze_authority_revoked,
-         a.risk_signals AS ownership_risk_signals
+         a.risk_signals AS ownership_risk_signals,
+        x.analysis_status AS slot_analysis_status,
+        x.positive_delta_transactions,x.distinct_reported_owners,
+        x.repeated_owner_accounts AS slot_repeated_owner_accounts,
+        x.possible_coordination AS slot_possible_coordination
        FROM launches l LEFT JOIN token_ownership_audits a ON a.mint=l.mint
+       LEFT JOIN token_launch_slot_audits x ON x.mint=l.mint
        ORDER BY l.first_seen DESC LIMIT $1`,[Math.min(Math.max(limit,1),100)]
     );
     return result.rows;
@@ -251,7 +325,7 @@ export class FableStore {
 
   /** Operational sampling health; failures and missing observations are visible, not hidden. */
   async scannerHealth() {
-    const [launches, jobs, markets, crossings, reconciliation, audits] = await Promise.all([
+    const [launches, jobs, markets, crossings, reconciliation, audits, slots] = await Promise.all([
       this.pool.query(`SELECT count(*)::int AS total,
         count(*) FILTER (WHERE first_seen > now() - interval '1 hour')::int AS last_hour,
         max(first_seen) AS latest_at FROM launches`),
@@ -275,7 +349,10 @@ export class FableStore {
         FROM pump_reconciliation WHERE singleton=TRUE`),
       this.pool.query(`SELECT count(*)::int AS count,
         count(*) FILTER (WHERE observed_at>now()-interval '1 hour')::int AS recent,
-        max(observed_at) AS last_at FROM token_ownership_audits`)
+        max(observed_at) AS last_at FROM token_ownership_audits`),
+      this.pool.query(`SELECT count(*) FILTER (WHERE analysis_status='partial')::int AS reviewed,
+        count(*) FILTER (WHERE analysis_status='unavailable')::int AS unavailable
+        FROM token_launch_slot_audits`)
     ]);
     return {
       asOf: new Date().toISOString(),
@@ -296,6 +373,7 @@ export class FableStore {
       },
       ownershipAudit: { ...audits.rows[0], beneficialOwnersVerified:false,
         note:"Top token-account concentrations are not classified beneficial ownership or evidence of a bundle." },
+      slotAudits: { ...slots.rows[0], completenessGuaranteed:false, bundlesProven:false },
       crossings: {
         total: crossings.rows[0].total,
         lastDay: crossings.rows[0].last_day,
