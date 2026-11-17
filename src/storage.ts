@@ -81,8 +81,8 @@ export class FableStore {
         sample.observedAt.getTime() >= previousAt.getTime() &&
         sample.observedAt.getTime() - previousAt.getTime() <= 15*60*1000;
       const type: PriceEvent = sample.marketCapUsd >= thresholdUsd
-        ? oldCap === null || !recentPrevious ? "first_seen_above"
-          : oldCap < thresholdUsd ? "crossed_up" : null
+        ? oldCap === null ? "first_seen_above"
+          : oldCap < thresholdUsd ? (recentPrevious ? "crossed_up" : "first_seen_above") : null
         : null;
       await c.query(
         `UPDATE launches SET latest_market_cap_usd=$2, latest_liquidity_usd=$3,
