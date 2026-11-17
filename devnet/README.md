@@ -43,6 +43,40 @@ A developer/operator (not a user of the exchange) would:
 
 Public devnet deployment, persistent deployment key management and comprehensive adversarial tests are **not completed**. The current connected Railway services are deliberately not linked to this unaudited program and continue to refuse real-money trading.
 
+## Public devnet funding after shared-runner faucet rate limits
+
+The public devnet Actions workflow uses a **fresh disposable program key** per attempt. Its
+fee payer can be either a disposable runner wallet (which depends on Solana's free
+public faucet) or a **separate, dedicated devnet-only test keypair** stored under
+GitHub Actions repository secret `FABLE_DEVNET_TEST_PAYER_B64`. This is never a
+mainnet or user trading wallet. The secret's value must be base64 of a 64-number
+JSON Solana keypair file, not its public address.
+
+The workflow first checks its fee payer balance and attempts up to two free public
+devnet airdrops if below 2.5 devnet SOL. If still unfunded, it fails **before**
+building or deploying. The previous proof-of-work faucet fallback was removed
+because it compiled but reported "No faucets found" on public devnet. The
+2.5 SOL threshold is an operational test budget, not a guarantee of adequate
+rent if the program binary changes. No paid RPC or purchased SOL is required.
+
+**Operator instructions (when faucet funding is unavailable in GitHub Actions):**
+1. Generate a **new keypair exclusively for disposable devnet testing** in a
+   trustworthy local Solana CLI environment and securely retain the local key.
+   Do not recycle any wallet that has ever held real assets.
+2. Use Solana's official free devnet faucet to fund the keypair's **public**
+   address with at least 2.5 devnet SOL. Do not send real SOL or USDC.
+3. Base64 encode the JSON keypair file **locally**, then put the result directly
+   into GitHub repository Settings → Secrets and variables → Actions as secret
+   `FABLE_DEVNET_TEST_PAYER_B64`. Never paste a secret into chat, commit it,
+   upload it as a workflow artifact, or print it in job logs.
+4. Manually dispatch the workflow `Public Solana devnet Fable options test`.
+   Review the deployed **public devnet** program ID and fake-token transaction
+   evidence. The workflow removes keypair files from its runner at completion.
+
+The repository's public devnet test has not passed until Actions logs explicitly
+print `PASSED_PUBLIC_DEVNET`. A passing local-validator test is not equivalent
+to a public devnet deployment. The shared payer is for valueless tests only.
+
 ## Critical risks before any mainnet release
 
 - The demo oracle is a centralized mock signer with arbitrary price control, not a manipulation-resistant price source for new Pump.fun tokens.
