@@ -1,0 +1,80 @@
+name: Public Solana devnet Fable options test (disposable test tokens)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/public-devnet-options-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  devnet-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install official Solana CLI and SBF tools
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Create disposable DEVNET identities (never store secrets)
+        run: |
+          set -euo pipefail
+          solana-keygen new --silent --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-devnet-program.json"
+          solana-keygen new --silent --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-devnet-payer.json"
+          PROGRAM_ID="$(solana address -k "$RUNNER_TEMP/fable-devnet-program.json")"
+          PAYER_ID="$(solana address -k "$RUNNER_TEMP/fable-devnet-payer.json")"
+          sed -i "s/Fg6PaFpoGXkYsidMpWxqSWYKuD8D7j7XQyVd7U5g4bD/$PROGRAM_ID/g" devnet/programs/fable_devnet_options/src/lib.rs devnet/Anchor.toml
+          echo "FABLE_TEST_PROGRAM_ID=$PROGRAM_ID" >> "$GITHUB_ENV"
+          echo "FABLE_TEST_PAYER_KEYPAIR=$RUNNER_TEMP/fable-devnet-payer.json" >> "$GITHUB_ENV"
+          echo "PUBLIC_DEVNET_PROGRAM_ID=$PROGRAM_ID"
+          echo "PUBLIC_DEVNET_FEE_PAYER=$PAYER_ID"
+          echo "Temporary keys remain only on this runner; no mainnet keys or real USDC."
+      - name: Build executable with disposable program ID
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/devnet
+          cargo build-sbf --manifest-path devnet/programs/fable_devnet_options/Cargo.toml --sbf-out-dir artifacts/devnet
+          test -s artifacts/devnet/fable_devnet_options.so
+          sha256sum artifacts/devnet/fable_devnet_options.so
+      - name: Fund disposable payer using free DEVNET faucet
+        run: |
+          set -euo pipefail
+          RPC=https://api.devnet.solana.com
+          solana cluster-version --url "$RPC"
+          # The free faucet can rate-limit GitHub shared runner IPs. This step fails
+          # explicitly; do not switch to mainnet or a paid provider.
+          for attempt in 1 2; do
+            if solana airdrop 2 --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"; then
+              echo "Received public devnet test SOL."
+            else
+              echo "Devnet faucet request $attempt unavailable; continuing only if already funded."
+            fi
+            sleep 5
+          done
+          solana balance --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"
+          export PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
+          if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
+            echo "::error::PUBLIC_DEVNET_FUNDING_UNAVAILABLE: require at least 2.5 free devnet SOL for program rent and fake token test."
+            exit 2
+          fi
+      - name: Deploy only to public Solana DEVNET
+        run: |
+          set -euo pipefail
+          RPC=https://api.devnet.solana.com
+          solana program deploy artifacts/devnet/fable_devnet_options.so \
+            --url "$RPC" \
+            --keypair "$FABLE_TEST_PAYER_KEYPAIR" \
+            --program-id "$RUNNER_TEMP/fable-devnet-program.json"
+          solana program show "$FABLE_TEST_PROGRAM_ID" --url "$RPC"
+          echo "Deployment verified on Solana DEVNET program: $FABLE_TEST_PROGRAM_ID"
+      - name: Execute fake test-USDC option contract on DEVNET
+        run: |
+          npm install --no-audit --no-fund
+          npm run test:solana:devnet
+      - name: Finalize results and discard temporary deployment identities
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/fable-devnet-program.json" "$RUNNER_TEMP/fable-devnet-payer.json"
+          echo "Temporary signing keys removed from runner."
