@@ -92,7 +92,7 @@ pub mod fable_devnet_options {
         Ok(())
     }
 
-    // Buyer pays a test-token premium directly to the writer.
+    // Buyer locks test-token premium in the PDA vault until valid mock settlement.
     // Both parties' addresses are stored and cannot be modified afterward.
     pub fn buy_offer(ctx: Context<BuyOffer>) -> Result<()> {
         let pos = &mut ctx.accounts.position;
@@ -105,7 +105,7 @@ pub mod fable_devnet_options {
             CpiContext::new(ctx.accounts.token_program.key(), TransferChecked {
                 mint: ctx.accounts.test_usdc_mint.to_account_info(),
                 from: ctx.accounts.buyer_tokens.to_account_info(),
-                to: ctx.accounts.writer_tokens.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
                 authority: ctx.accounts.buyer.to_account_info(),
             }),
             pos.premium_micro,
@@ -144,7 +144,9 @@ pub mod fable_devnet_options {
             pos.size_atomic, pos.underlying_decimals, pos.cap_micro
         )?;
         let vault_balance = ctx.accounts.vault.amount;
-        require!(vault_balance >= pos.cap_micro, DevnetError::VaultNotFunded);
+        let expected = pos.cap_micro.checked_add(pos.premium_micro)
+            .ok_or(error!(DevnetError::MathOverflow))?;
+        require!(vault_balance >= expected, DevnetError::VaultNotFunded);
         let refund = vault_balance.checked_sub(payout)
             .ok_or(error!(DevnetError::MathOverflow))?;
         pos.payout_micro = payout;
@@ -194,9 +196,8 @@ pub mod fable_devnet_options {
         return_to_writer(&mut ctx.accounts, Phase::Cancelled)
     }
 
-    // Devnet-only liveness escape hatch. If mock oracle failed to report
-    // after one hour, collateral returns to writer. Buyer premium is NOT
-    // refunded: this is an unacceptable mainnet consumer-protection design.
+    // Devnet-only liveness escape hatch. If mock oracle fails to report
+    // after one hour, test premium returns to buyer and collateral to writer.
     pub fn refund_without_price(mut ctx: Context<WriterRefund>) -> Result<()> {
         let pos = &ctx.accounts.position;
         require!(pos.phase == Phase::Live, DevnetError::InvalidPhase);
@@ -214,8 +215,26 @@ fn return_to_writer(accounts: &mut WriterRefund<'_>, next: Phase) -> Result<()> 
     let bump = [pos.bump];
     let seeds: &[&[u8]] = &[b"position", writer.as_ref(), nonce.as_ref(), bump.as_ref()];
     let signer: &[&[&[u8]]] = &[seeds];
-    let amount = accounts.vault.amount;
-    require!(amount >= pos.cap_micro, DevnetError::VaultNotFunded);
+    let vault_total = accounts.vault.amount;
+    let premium_refund = if next == Phase::Refunded { pos.premium_micro } else { 0 };
+    let expected = pos.cap_micro.checked_add(premium_refund)
+        .ok_or(error!(DevnetError::MathOverflow))?;
+    require!(vault_total >= expected, DevnetError::VaultNotFunded);
+    if premium_refund > 0 {
+        require_keys_eq!(accounts.buyer_tokens.owner, pos.buyer,
+            DevnetError::IncorrectBuyerRefund);
+        token_interface::transfer_checked(
+            CpiContext::new(accounts.token_program.key(), TransferChecked {
+                mint: accounts.test_usdc_mint.to_account_info(),
+                from: accounts.vault.to_account_info(),
+                to: accounts.buyer_tokens.to_account_info(),
+                authority: pos.to_account_info(),
+            }).with_signer(signer),
+            premium_refund, 6,
+        )?;
+    }
+    let amount = vault_total.checked_sub(premium_refund)
+        .ok_or(error!(DevnetError::MathOverflow))?;
     if amount > 0 {
         token_interface::transfer_checked(
             CpiContext::new(accounts.token_program.key(), TransferChecked {
@@ -393,6 +412,9 @@ pub struct WriterRefund<'info> {
     #[account(mut, token::mint = test_usdc_mint, token::authority = position.writer,
         token::token_program = token_program)]
     pub writer_tokens: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = test_usdc_mint,
+        token::token_program = token_program)]
+    pub buyer_tokens: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, associated_token::mint = test_usdc_mint,
         associated_token::authority = position, associated_token::token_program = token_program)]
     pub vault: InterfaceAccount<'info, TokenAccount>,
@@ -431,6 +453,8 @@ pub enum DevnetError {
     InvalidOracle,
     #[msg("Only the writer can cancel an unsold offer")]
     WriterMustSign,
+    #[msg("Refund destination is not owned by option buyer")]
+    IncorrectBuyerRefund,
 }
 
 #[cfg(test)]
