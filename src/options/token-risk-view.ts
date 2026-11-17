@@ -11,6 +11,7 @@ export interface TrackedRiskRow {
   latest_market_cap_usd?:number|null;
   latest_liquidity_usd?:number|null;
   latest_price_source?:string|null;
+  latest_anomaly_at?:string|Date|null;
 }
 function timestamp(value:string|Date|null|undefined):string|null {
   if(value instanceof Date)return Number.isFinite(value.getTime())?value.toISOString():null;
@@ -31,7 +32,8 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
     suspiciousVolumeEvidence:"unknown",
     mintAuthorityRevoked:null,
     freezeAuthorityRevoked:null,
-    independentPriceCheck:false
+    independentPriceCheck:false,
+    recentAnomalyAt:timestamp(row.latest_anomaly_at)
   };
   return {
     ...assessTokenRisk(input,now),
