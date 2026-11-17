@@ -33,5 +33,6 @@ jobs:
       - run: npm run check
       - run: node --check web/app.js
       - run: node --check web/orbit.js
+      - run: node --check web/orbit-polish.js
       - run: npm test
       - run: npm run test:rfq-integration
