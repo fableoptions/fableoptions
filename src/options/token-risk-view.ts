@@ -22,7 +22,7 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
     observedMarketCapUsd:row.latest_market_cap_usd??null,
     observedAt:timestamp(row.last_price_at),
     liquidityUsd:row.latest_liquidity_usd??null,
-    tokenCreatedAt:timestamp(row.first_seen),
+    tokenCreatedAt:null, // ingestion time is NOT verified token creation time
     dataSource:row.latest_price_source??null,
     topHolderConcentrationPct:null,
     topTenConcentrationPct:null,
