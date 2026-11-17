@@ -1,0 +1,14 @@
+# Experimental devnet-only sandbox. Not a mainnet product.
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+# Placeholder; regenerate a devnet program keypair and update declare_id! before deploying.
+fable_devnet_options = "Fg6PaFpoGXkYsidMpWxqSWYKuD8D7j7XQyVd7U5g4bD"
+
+[provider]
+cluster = "devnet"
+
+[scripts]
+test = "cargo test --manifest-path Cargo.toml"
