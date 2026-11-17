@@ -31,18 +31,12 @@ jobs:
           echo "PUBLIC_DEVNET_PROGRAM_ID=$PROGRAM_ID"
           echo "PUBLIC_DEVNET_FEE_PAYER=$PAYER_ID"
           echo "Temporary keys remain only on this runner; no mainnet keys or real USDC."
-      - name: Build executable with disposable program ID
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts/devnet
-          cargo build-sbf --manifest-path devnet/programs/fable_devnet_options/Cargo.toml --sbf-out-dir artifacts/devnet
-          test -s artifacts/devnet/fable_devnet_options.so
-          sha256sum artifacts/devnet/fable_devnet_options.so
       - name: Fund disposable payer using free DEVNET faucet
         run: |
           set -euo pipefail
           RPC=https://api.devnet.solana.com
           solana cluster-version --url "$RPC"
+          solana config set --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"
           # The free faucet can rate-limit GitHub shared runner IPs. This step fails
           # explicitly; do not switch to mainnet or a paid provider.
           for attempt in 1 2; do
@@ -63,6 +57,7 @@ jobs:
             # never for compiling Fable's smart contract.
             if timeout 150s rustup toolchain install 1.70.0 --profile minimal &&
                timeout 300s cargo +1.70.0 install devnet-pow --locked; then
+              devnet-pow -u "$RPC" -k "$FABLE_TEST_PAYER_KEYPAIR" get-all-faucets || true
               timeout 360s devnet-pow -u "$RPC" -k "$FABLE_TEST_PAYER_KEYPAIR" mine --target-lamports 2700000000 || true
             else
               echo "Proof-of-work faucet CLI installation unavailable."
@@ -73,6 +68,13 @@ jobs:
             echo "::error::PUBLIC_DEVNET_FUNDING_UNAVAILABLE: require at least 2.5 free devnet SOL for program rent and fake token test."
             exit 2
           fi
+      - name: Build executable with disposable program ID
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/devnet
+          cargo build-sbf --manifest-path devnet/programs/fable_devnet_options/Cargo.toml --sbf-out-dir artifacts/devnet
+          test -s artifacts/devnet/fable_devnet_options.so
+          sha256sum artifacts/devnet/fable_devnet_options.so
       - name: Deploy only to public Solana DEVNET
         run: |
           set -euo pipefail
