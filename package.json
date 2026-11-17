@@ -8,11 +8,15 @@
     "check": "tsc --noEmit",
     "test": "node --import tsx --test src/*.test.ts",
     "monitor": "tsx src/monitor.ts",
-    "pump:stream": "tsx src/pump-stream.ts"
+    "pump:stream": "tsx src/pump-stream.ts",
+    "pump:launches": "tsx src/pump-launches.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "bs58": "^6.0.0"
   }
 }
