@@ -14,6 +14,6 @@ export function marketFreshness(observedAt: string | Date | null, now = new Date
   if (age > maxAgeSeconds) return {status:"stale",ageSeconds:age,eligibleForDisplay:false};
   return {status:"fresh",ageSeconds:Math.max(0,age),eligibleForDisplay:true};
 }
-export function decorateMarketRow<T extends {last_price_at?:string|Date|null}>(row:T,now=new Date()) {
-  return {...row,marketData:marketFreshness(row.last_price_at??null,now),marketDataSource:"sampled_geckoterminal",settlementOracle:false};
+export function decorateMarketRow<T extends {last_price_at?:string|Date|null;latest_price_source?:string|null}>(row:T,now=new Date()) {
+  return {...row,marketData:marketFreshness(row.last_price_at??null,now),marketDataSource:row.latest_price_source??"unknown_source",settlementOracle:false};
 }
