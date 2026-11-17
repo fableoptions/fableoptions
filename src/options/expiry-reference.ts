@@ -6,6 +6,7 @@
 export type CapObservation={
  observedAt:string|Date;
  marketCapUsd:number;
+ tokenPriceUsd?:number|null;
  liquidityUsd:number|null;
  source:string;
  poolAddress:string;
@@ -94,5 +95,35 @@ export function assessExpiryCapWindow(
      ?Math.min(...liquidities as number[]):null,
    executable:false,validSettlementOracle:false,underlyingTokenPriceUsd:null,
    disclaimer:DISCLAIMER
+ };
+}
+
+/** Optional token UNIT-price reference. Unlike cap, this is dimensionally a
+ * token USD price, but one DEX source is never sufficient for settlement.
+ */
+export function assessExpiryTokenPriceWindow(
+ mint:string,observations:CapObservation[],startAt:Date,endAt:Date
+){
+ const missing=observations.some(o=>o.tokenPriceUsd===null||o.tokenPriceUsd===undefined||
+   !Number.isFinite(o.tokenPriceUsd)||o.tokenPriceUsd<=0);
+ const converted=observations.map(o=>({
+   ...o,marketCapUsd:o.tokenPriceUsd??NaN
+ }));
+ const capResult=assessExpiryCapWindow(mint,converted,startAt,endAt);
+ const reasons=missing?[...new Set([...capResult.reasonCodes,"MISSING_OR_INVALID_TOKEN_UNIT_PRICE"])]:capResult.reasonCodes;
+ const safe=capResult.status==="sampled_reference_only"&&!missing;
+ return {
+   kind:"indicative_token_unit_price_twap" as const,
+   status:safe?"sampled_reference_only" as const
+     :capResult.status==="quarantined"||missing?"quarantined" as const:"insufficient_data" as const,
+   mint,startAt:capResult.startAt,endAt:capResult.endAt,windowSeconds:capResult.windowSeconds,
+   indicativeTokenPriceTwapUsd:safe?capResult.sampledMarketCapTwapUsd:null,
+   reasonCodes:reasons,observationCount:capResult.observationCount,
+   source:capResult.source,poolAddress:capResult.poolAddress,
+   maxGapSeconds:capResult.maxGapSeconds,
+   minObservedLiquidityUsd:capResult.minObservedLiquidityUsd,
+   executable:false as const,validSettlementOracle:false as const,
+   payoutCalculable:false as const,
+   disclaimer:"Historical DEX unit-price TWAP is indicative, source-dependent and manipulable. It is NOT a verified oracle or executable expiry settlement price."
  };
 }
