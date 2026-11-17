@@ -58,7 +58,7 @@ jobs:
           if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
             echo "Standard devnet airdrop unavailable; attempting a LIMITED proof-of-work faucet reward."
             echo "This mines at most a small amount of valueless devnet SOL, never mainnet SOL."
-            if timeout 360s cargo install devnet-pow --locked; then
+            if timeout 360s cargo install devnet-pow; then
               timeout 420s devnet-pow -u "$RPC" -k "$FABLE_TEST_PAYER_KEYPAIR" mine --target-lamports 2700000000 || true
             else
               echo "Proof-of-work faucet CLI installation unavailable."
