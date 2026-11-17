@@ -73,15 +73,22 @@ export class FableStore {
     try {
       await c.query("BEGIN");
       const previous = await c.query(
-        "SELECT latest_market_cap_usd,last_price_at FROM launches WHERE mint=$1 FOR UPDATE", [sample.mint]
+        "SELECT latest_market_cap_usd,last_price_at,latest_price_source FROM launches WHERE mint=$1 FOR UPDATE", [sample.mint]
       );
       if (!previous.rows.length) { await c.query("ROLLBACK"); return null; }
       const oldCap = previous.rows[0].latest_market_cap_usd as number | null;
+      const oldSource: string | null = previous.rows[0].latest_price_source;
+      const newSource = sample.source ?? "unspecified";
       const previousAt: Date | null = previous.rows[0].last_price_at;
+      // Never replace a fresher observation with a delayed/replayed price sample.
+      if (previousAt instanceof Date && sample.observedAt.getTime() < previousAt.getTime()) {
+        await c.query("ROLLBACK"); return null;
+      }
       // A large observation gap cannot prove when the threshold was crossed.
       const recentPrevious = previousAt instanceof Date &&
         sample.observedAt.getTime() >= previousAt.getTime() &&
-        sample.observedAt.getTime() - previousAt.getTime() <= 15*60*1000;
+        sample.observedAt.getTime() - previousAt.getTime() <= 15*60*1000 &&
+        oldSource === newSource;
       const type: PriceEvent = sample.marketCapUsd >= thresholdUsd
         ? oldCap === null ? "first_seen_above"
           : oldCap < thresholdUsd ? (recentPrevious ? "crossed_up" : "first_seen_above") : null
@@ -91,7 +98,7 @@ export class FableStore {
          latest_pool=$4, last_price_at=$5::timestamptz, latest_price_source=$7,
          next_poll_at=$5::timestamptz + $6::double precision * interval '1 second' WHERE mint=$1`,
         [sample.mint, sample.marketCapUsd, sample.poolLiquidityUsd, sample.poolAddress,
-         sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,sample.source??"unspecified"]
+         sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,newSource]
       );
       if (type) {
         await c.query(
@@ -176,7 +183,7 @@ export class FableStore {
       healthLimits: [
         "Stats reflect this database only, not complete Pump.fun coverage.",
         "A scanner process may have disconnected without changing these counters.",
-        "GeckoTerminal prices are sampled and may be missing or stale.",
+        "DexScreener prices are sampled and may be missing or stale.",
         "Live decode accuracy and source reconciliation must be independently verified."
       ]
     };
