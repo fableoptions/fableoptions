@@ -18,7 +18,8 @@
     "verify:pump:mainnet": "tsx src/pump-mainnet-validation.ts",
     "verify:venue:program": "tsx src/options/check-venue-program.ts",
     "verify:usdc:account": "tsx src/options/inspect-usdc-account.ts",
-    "test:solana:local": "tsx devnet/scripts/local-validator-smoke.ts"
+    "test:solana:local": "tsx devnet/scripts/local-validator-smoke.ts",
+    "test:solana:devnet": "tsx devnet/scripts/public-devnet-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
