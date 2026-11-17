@@ -2,7 +2,7 @@ import pg from "pg";
 
 const { Pool } = pg;
 export type LaunchRecord = { mint: string; signature: string; slot: number; name: string; symbol: string; uri: string; instruction: string };
-export type MarketSample = { mint: string; marketCapUsd: number; poolLiquidityUsd: number | null; poolAddress: string; observedAt: Date };
+export type MarketSample = { mint: string; marketCapUsd: number; poolLiquidityUsd: number | null; poolAddress: string; observedAt: Date; source?: string };
 export type PriceEvent = "crossed_up" | "first_seen_above" | null;
 
 export class FableStore {
@@ -28,6 +28,7 @@ export class FableStore {
         last_price_at TIMESTAMPTZ,
         next_poll_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+      ALTER TABLE launches ADD COLUMN IF NOT EXISTS latest_price_source TEXT;
       CREATE INDEX IF NOT EXISTS launches_next_poll_idx ON launches (next_poll_at);
       CREATE TABLE IF NOT EXISTS crossing_events (
         id BIGSERIAL PRIMARY KEY,
@@ -40,6 +41,7 @@ export class FableStore {
         observed_at TIMESTAMPTZ NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+      ALTER TABLE crossing_events ADD COLUMN IF NOT EXISTS price_source TEXT;
       CREATE INDEX IF NOT EXISTS crossing_events_created_idx ON crossing_events (created_at DESC);
     `);
   }
@@ -86,18 +88,18 @@ export class FableStore {
         : null;
       await c.query(
         `UPDATE launches SET latest_market_cap_usd=$2, latest_liquidity_usd=$3,
-         latest_pool=$4, last_price_at=$5,
+         latest_pool=$4, last_price_at=$5, latest_price_source=$7,
          next_poll_at=$5 + $6 * interval '1 second' WHERE mint=$1`,
         [sample.mint, sample.marketCapUsd, sample.poolLiquidityUsd, sample.poolAddress,
-         sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300]
+         sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,sample.source??"unspecified"]
       );
       if (type) {
         await c.query(
           `INSERT INTO crossing_events(mint,event_type,previous_market_cap_usd,
-           market_cap_usd,pool_liquidity_usd,pool_address,observed_at)
-           VALUES($1,$2,$3,$4,$5,$6,$7)`,
+           market_cap_usd,pool_liquidity_usd,pool_address,observed_at,price_source)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
           [sample.mint,type,oldCap,sample.marketCapUsd,sample.poolLiquidityUsd,
-           sample.poolAddress,sample.observedAt]
+           sample.poolAddress,sample.observedAt,sample.source??"unspecified"]
         );
       }
       await c.query("COMMIT");
@@ -110,7 +112,7 @@ export class FableStore {
   async recentCrossings(limit=50) {
     const result = await this.pool.query(
       `SELECT c.id,c.mint,l.symbol,l.token_name,c.event_type,c.previous_market_cap_usd,
-         c.market_cap_usd,c.pool_liquidity_usd,c.pool_address,c.observed_at
+         c.market_cap_usd,c.pool_liquidity_usd,c.pool_address,c.observed_at,c.price_source
          FROM crossing_events c JOIN launches l ON l.mint=c.mint
          ORDER BY c.id DESC LIMIT $1`,
       [Math.min(Math.max(limit, 1), 100)]
@@ -120,7 +122,7 @@ export class FableStore {
   async recentLaunches(limit=50) {
     const result = await this.pool.query(
       `SELECT mint,symbol,token_name,signature,slot,first_seen,latest_market_cap_usd,
-         latest_liquidity_usd,last_price_at FROM launches
+         latest_liquidity_usd,last_price_at,latest_price_source FROM launches
        ORDER BY first_seen DESC LIMIT $1`,[Math.min(Math.max(limit,1),100)]
     );
     return result.rows;
@@ -159,7 +161,7 @@ export class FableStore {
       },
       marketSampling: {
         ...markets.rows[0],
-        marketDataProvider: "geckoterminal",
+        marketDataProvider: "dexscreener",
         freshnessWindowSeconds: 180,
         priceFeedIsSettlementOracle: false
       },
