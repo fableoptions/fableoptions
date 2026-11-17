@@ -2,6 +2,7 @@ import pg from "pg";
 import { assessMarketJump } from "./market-anomaly.js";
 import type { OwnershipAudit } from "./options/ownership-audit.js";
 import type { SlotAcquisitionSignal } from "./options/launch-slot-analysis.js";
+import type { FundingLinkReport } from "./options/funding-links.js";
 
 const { Pool } = pg;
 export type LaunchRecord = { mint: string; signature: string; slot: number; name: string; symbol: string; uri: string; instruction: string };
@@ -75,6 +76,19 @@ export class FableStore {
         attempts INTEGER NOT NULL DEFAULT 0,
         next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         last_error TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS token_funding_reviews (
+        mint TEXT PRIMARY KEY REFERENCES launches(mint),
+        reviewed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        result_status TEXT NOT NULL CHECK(result_status IN ('partial_with_link_signal',
+          'partial_no_link_detected','unavailable')),
+        scanned_wallets INTEGER NOT NULL DEFAULT 0,
+        inspected_transactions INTEGER NOT NULL DEFAULT 0,
+        common_funding_source_count INTEGER NOT NULL DEFAULT 0,
+        source_recipient_counts JSONB NOT NULL DEFAULT '[]'::jsonb,
+        last_error TEXT,
+        beneficial_ownership_proven BOOLEAN NOT NULL DEFAULT FALSE
+          CHECK(beneficial_ownership_proven=FALSE)
       );
       CREATE TABLE IF NOT EXISTS token_launch_slot_audits (
         mint TEXT PRIMARY KEY REFERENCES launches(mint),
@@ -252,6 +266,37 @@ export class FableStore {
           LEAST(token_ownership_audit_failures.attempts,4))) * interval '1 minute'`,
       [mint,reason.slice(0,100)]);
   }
+  async recordFundingReview(report:FundingLinkReport):Promise<void>{
+    if(report.commonControlProven!==false||report.scannedWallets>4||
+       report.recentTransactionsInspected>12||
+       !["partial_with_link_signal","partial_no_link_detected"].includes(report.status))
+      throw new Error("invalid_funding_review");
+    await this.pool.query(`
+      INSERT INTO token_funding_reviews(
+        mint,result_status,scanned_wallets,inspected_transactions,
+        common_funding_source_count,source_recipient_counts,
+        beneficial_ownership_proven,last_error
+      ) VALUES($1,$2,$3,$4,$5,$6,FALSE,NULL)
+      ON CONFLICT(mint) DO UPDATE SET
+        reviewed_at=now(),result_status=excluded.result_status,
+        scanned_wallets=excluded.scanned_wallets,
+        inspected_transactions=excluded.inspected_transactions,
+        common_funding_source_count=excluded.common_funding_source_count,
+        source_recipient_counts=excluded.source_recipient_counts,
+        beneficial_ownership_proven=FALSE,last_error=NULL
+    `,[report.mint,report.status,report.scannedWallets,report.recentTransactionsInspected,
+      report.commonFundingSources.length,
+      JSON.stringify(report.commonFundingSources.map(x=>x.recipientCount))]);
+  }
+  async recordFundingFailure(mint:string,error:string):Promise<void>{
+    await this.pool.query(`
+      INSERT INTO token_funding_reviews(mint,result_status,last_error)
+      VALUES($1,'unavailable',$2)
+      ON CONFLICT(mint) DO UPDATE SET
+        reviewed_at=now(),result_status='unavailable',
+        last_error=excluded.last_error,beneficial_ownership_proven=FALSE
+    `,[mint,error.slice(0,150)]);
+  }
   async dueLaunchSlotAudit():Promise<{mint:string;signature:string;slot:number}|null>{
     const r=await this.pool.query(`
       SELECT l.mint,l.signature,l.slot FROM launches l
@@ -314,9 +359,12 @@ export class FableStore {
         x.analysis_status AS slot_analysis_status,
         x.positive_delta_transactions,x.distinct_reported_owners,
         x.repeated_owner_accounts AS slot_repeated_owner_accounts,
-        x.possible_coordination AS slot_possible_coordination
+        x.possible_coordination AS slot_possible_coordination,
+        f.result_status AS funding_status,f.scanned_wallets AS funding_scanned_wallets,
+        f.common_funding_source_count,f.source_recipient_counts AS funding_source_recipient_counts
        FROM launches l LEFT JOIN token_ownership_audits a ON a.mint=l.mint
        LEFT JOIN token_launch_slot_audits x ON x.mint=l.mint
+       LEFT JOIN token_funding_reviews f ON f.mint=l.mint
        WHERE l.mint=$1 LIMIT 1`,[mint]
     );
     return result.rows[0]??null;
@@ -333,9 +381,12 @@ export class FableStore {
         x.analysis_status AS slot_analysis_status,
         x.positive_delta_transactions,x.distinct_reported_owners,
         x.repeated_owner_accounts AS slot_repeated_owner_accounts,
-        x.possible_coordination AS slot_possible_coordination
+        x.possible_coordination AS slot_possible_coordination,
+        f.result_status AS funding_status,f.scanned_wallets AS funding_scanned_wallets,
+        f.common_funding_source_count,f.source_recipient_counts AS funding_source_recipient_counts
        FROM launches l LEFT JOIN token_ownership_audits a ON a.mint=l.mint
        LEFT JOIN token_launch_slot_audits x ON x.mint=l.mint
+       LEFT JOIN token_funding_reviews f ON f.mint=l.mint
        ORDER BY l.first_seen DESC LIMIT $1`,[Math.min(Math.max(limit,1),100)]
     );
     return result.rows;
@@ -343,7 +394,7 @@ export class FableStore {
 
   /** Operational sampling health; failures and missing observations are visible, not hidden. */
   async scannerHealth() {
-    const [launches, jobs, markets, crossings, reconciliation, audits, slots] = await Promise.all([
+    const [launches, jobs, markets, crossings, reconciliation, audits, slots, funding] = await Promise.all([
       this.pool.query(`SELECT count(*)::int AS total,
         count(*) FILTER (WHERE first_seen > now() - interval '1 hour')::int AS last_hour,
         max(first_seen) AS latest_at FROM launches`),
@@ -370,7 +421,11 @@ export class FableStore {
         max(observed_at) AS last_at FROM token_ownership_audits`),
       this.pool.query(`SELECT count(*) FILTER (WHERE analysis_status='partial')::int AS reviewed,
         count(*) FILTER (WHERE analysis_status='unavailable')::int AS unavailable
-        FROM token_launch_slot_audits`)
+        FROM token_launch_slot_audits`),
+      this.pool.query(`SELECT count(*) FILTER (WHERE result_status='partial_with_link_signal')::int AS flagged,
+        count(*) FILTER (WHERE result_status='partial_no_link_detected')::int AS inconclusive,
+        count(*) FILTER (WHERE result_status='unavailable')::int AS unavailable
+        FROM token_funding_reviews`)
     ]);
     return {
       asOf: new Date().toISOString(),
@@ -392,6 +447,7 @@ export class FableStore {
       ownershipAudit: { ...audits.rows[0], beneficialOwnersVerified:false,
         note:"Top token-account concentrations are not classified beneficial ownership or evidence of a bundle." },
       slotAudits: { ...slots.rows[0], completenessGuaranteed:false, bundlesProven:false },
+      fundingReviews: {...funding.rows[0],commonControlProven:false,scope:"bounded_public_transfers"},
       crossings: {
         total: crossings.rows[0].total,
         lastDay: crossings.rows[0].last_day,
