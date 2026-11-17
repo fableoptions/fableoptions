@@ -55,8 +55,20 @@ export class FableStore {
   }
   async dueTokens(limit = 10): Promise<Array<{ mint: string; symbol: string }>> {
     const result = await this.pool.query(
-      `SELECT mint, symbol FROM launches WHERE next_poll_at <= now()
-       ORDER BY next_poll_at ASC, first_seen DESC LIMIT $1`, [Math.min(Math.max(limit, 1), 100)]
+      `SELECT mint, symbol FROM launches
+       WHERE next_poll_at <= now() AND first_seen >= now() - interval '2 days'
+       ORDER BY
+         CASE
+           WHEN latest_market_cap_usd >= 100000 AND latest_market_cap_usd < 1000000 THEN 0
+           WHEN first_seen >= now() - interval '30 minutes' THEN 1
+           ELSE 2
+         END ASC,
+         CASE
+           WHEN latest_market_cap_usd >= 100000 AND latest_market_cap_usd < 1000000
+           THEN last_price_at
+         END ASC NULLS LAST,
+         first_seen DESC
+       LIMIT $1`, [Math.min(Math.max(limit, 1), 100)]
     );
     return result.rows as Array<{ mint: string; symbol: string }>;
   }
