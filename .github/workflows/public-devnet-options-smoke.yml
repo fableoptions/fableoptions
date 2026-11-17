@@ -18,11 +18,22 @@ jobs:
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
-      - name: Create disposable DEVNET identities (never store secrets)
+      - name: Create disposable program and isolated DEVNET payer
+        env:
+          FABLE_DEVNET_TEST_PAYER_B64: ${{ secrets.FABLE_DEVNET_TEST_PAYER_B64 }}
         run: |
           set -euo pipefail
           solana-keygen new --silent --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-devnet-program.json"
-          solana-keygen new --silent --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-devnet-payer.json"
+          # Optional dedicated DEVNET-ONLY fee payer in masked Actions secret.
+          # Never commit, upload as artifact, or print its private bytes.
+          if [ -n "$FABLE_DEVNET_TEST_PAYER_B64" ]; then
+            (umask 077; printf '%s' "$FABLE_DEVNET_TEST_PAYER_B64" | base64 --decode > "$RUNNER_TEMP/fable-devnet-payer.json")
+            node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(!Array.isArray(p)||p.length!==64||!p.every(n=>Number.isInteger(n)&&n>=0&&n<=255))process.exit(1)' "$RUNNER_TEMP/fable-devnet-payer.json"
+            echo "Using dedicated devnet-only secret-backed test payer."
+          else
+            solana-keygen new --silent --no-bip39-passphrase --force -o "$RUNNER_TEMP/fable-devnet-payer.json"
+            echo "Using disposable payer; public faucet funding required."
+          fi
           PROGRAM_ID="$(solana address -k "$RUNNER_TEMP/fable-devnet-program.json")"
           PAYER_ID="$(solana address -k "$RUNNER_TEMP/fable-devnet-payer.json")"
           sed -i "s/Fg6PaFpoGXkYsidMpWxqSWYKuD8D7j7XQyVd7U5g4bD/$PROGRAM_ID/g" devnet/programs/fable_devnet_options/src/lib.rs devnet/Anchor.toml
@@ -30,44 +41,43 @@ jobs:
           echo "FABLE_TEST_PAYER_KEYPAIR=$RUNNER_TEMP/fable-devnet-payer.json" >> "$GITHUB_ENV"
           echo "PUBLIC_DEVNET_PROGRAM_ID=$PROGRAM_ID"
           echo "PUBLIC_DEVNET_FEE_PAYER=$PAYER_ID"
-          echo "Temporary keys remain only on this runner; no mainnet keys or real USDC."
+          echo "Temporary program key created; no mainnet keys or real USDC."
       - name: Fund disposable payer using free DEVNET faucet
         run: |
           set -euo pipefail
           RPC=https://api.devnet.solana.com
           solana cluster-version --url "$RPC"
           solana config set --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"
-          # The free faucet can rate-limit GitHub shared runner IPs. This step fails
-          # explicitly; do not switch to mainnet or a paid provider.
-          for attempt in 1 2; do
-            if solana airdrop 2 --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"; then
-              echo "Received public devnet test SOL."
-            else
-              echo "Devnet faucet request $attempt unavailable; continuing only if already funded."
-            fi
-            sleep 5
-          done
-          solana balance --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"
-          export PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
-          if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
-            echo "Standard devnet airdrop unavailable; attempting a LIMITED proof-of-work faucet reward."
-            echo "This mines at most a small amount of valueless devnet SOL, never mainnet SOL."
-            # devnet-pow 0.1.4 pins wasm-bindgen 0.2.86; Rust 1.82+ rejects it.
-            # Use a pinned OLD TOOLCHAIN ONLY for this devnet test utility,
-            # never for compiling Fable's smart contract.
-            if timeout 150s rustup toolchain install 1.70.0 --profile minimal &&
-               timeout 300s cargo +1.70.0 install devnet-pow --locked; then
-              devnet-pow -u "$RPC" -k "$FABLE_TEST_PAYER_KEYPAIR" get-all-faucets || true
-              timeout 360s devnet-pow -u "$RPC" -k "$FABLE_TEST_PAYER_KEYPAIR" mine --target-lamports 2700000000 || true
-            else
-              echo "Proof-of-work faucet CLI installation unavailable."
-            fi
-            export PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
-          fi
-          if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
-            echo "::error::PUBLIC_DEVNET_FUNDING_UNAVAILABLE: require at least 2.5 free devnet SOL for program rent and fake token test."
+          # No paid providers, no mainnet, no unmaintained faucet miners.
+          PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
+          if [ -z "$PAYER_LAMPORTS" ]; then
+            echo "::error::Could not read devnet payer balance."
             exit 2
           fi
+          if [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
+            for attempt in 1 2; do
+              if solana airdrop 2 --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"; then
+                echo "Public devnet airdrop accepted."
+              else
+                echo "Public devnet airdrop $attempt rate-limited or unavailable."
+              fi
+              PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
+              [ -n "$PAYER_LAMPORTS" ] && [ "$PAYER_LAMPORTS" -ge 2500000000 ] && break
+              sleep 5
+            done
+          fi
+          if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
+            echo "::error::PUBLIC_DEVNET_FUNDING_UNAVAILABLE: at least 2.5 free devnet SOL required."
+            echo "Use a separate devnet-only funded payer in the FABLE_DEVNET_TEST_PAYER_B64 repository Actions secret; never use a mainnet wallet."
+            {
+              echo "### Public devnet deployment blocked by free faucet"
+              echo "GitHub shared-runner faucet requests were rate-limited. No paid provider or real funds were used."
+              echo "Next action: configure a dedicated devnet-only payer in Actions secret FABLE_DEVNET_TEST_PAYER_B64 and fund it using the free Solana devnet faucet."
+              echo "Do not put private signing keys in the repo, logs, or chat."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
+          echo "Fee payer has sufficient valueless devnet SOL to attempt deployment."
       - name: Build executable with disposable program ID
         run: |
           set -euo pipefail
