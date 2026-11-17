@@ -19,6 +19,7 @@ const MICRO_PER_USD: u128 = 1_000_000;
 const MAX_LIFETIME: i64 = 7 * 24 * 3600;
 const PRICE_GRACE: i64 = 3600;
 const MAX_PRICE_PICO: u64 = 1_000_000_000_000_000;
+const MAX_SIZE_ATOMIC: u64 = 1_000_000_000_000_000;
 const MAX_CAP_MICRO: u64 = 1_000_000_000_000; // test 1 million USD max in micro-units
 
 #[program]
@@ -62,9 +63,11 @@ pub mod fable_devnet_options {
         require!(side <= 1, DevnetError::InvalidSide);
         require!(underlying_mint != Pubkey::default(), DevnetError::InvalidUnderlying);
         require!(underlying_decimals <= 9, DevnetError::InvalidDecimals);
-        require!(size_atomic > 0 && strike_pico > 0 && strike_pico <= MAX_PRICE_PICO,
+        require!(size_atomic > 0 && size_atomic <= MAX_SIZE_ATOMIC
+            && strike_pico > 0 && strike_pico <= MAX_PRICE_PICO,
             DevnetError::InvalidTerms);
-        require!(premium_micro > 0 && cap_micro > 0 && cap_micro <= MAX_CAP_MICRO,
+        require!(premium_micro > 0 && premium_micro <= MAX_CAP_MICRO
+            && cap_micro > 0 && cap_micro <= MAX_CAP_MICRO,
             DevnetError::InvalidTerms);
         require!(expiry_unix >= now.saturating_add(60)
             && expiry_unix <= now.saturating_add(MAX_LIFETIME),
@@ -489,6 +492,12 @@ mod tests {
     fn put_pays_exact_usdc_micro_units() {
         assert_eq!(capped_payout(1, 2_000_000_000, 500_000_000,
             100_000_000_000, 6, 500_000_000).unwrap(), 150_000_000);
+    }
+
+    #[test]
+    fn maximum_allowed_size_and_mock_price_fit_checked_arithmetic() {
+        assert_eq!(capped_payout(0, 1, MAX_PRICE_PICO,
+            MAX_SIZE_ATOMIC, 0, MAX_CAP_MICRO).unwrap(), MAX_CAP_MICRO);
     }
 
     #[test]
