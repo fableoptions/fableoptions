@@ -13,7 +13,7 @@ let stopped = false;
 const seen = new Set<string>();
 function connect() {
   if (stopped) return;
-  const ws = new WebSocket(url);
+  const ws = new WebSocket(url!);
   let subscriptionId: number | undefined;
   ws.addEventListener("open", () => {
     ws.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "logsSubscribe", params: [{ mentions: [programId] }, { commitment: "confirmed" }] }));
