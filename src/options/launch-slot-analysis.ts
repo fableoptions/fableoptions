@@ -92,10 +92,39 @@ export async function fetchLaunchSlot(
  });
  if(result.status===429)throw new Error("SLOT_RPC_RATE_LIMITED");
  if(!result.ok)throw new Error("SLOT_RPC_HTTP_"+result.status);
- const payload=await result.json() as {
+ const MAX_RESPONSE_BYTES=8*1024*1024;
+ const declared=Number(result.headers?.get("content-length")??0);
+ if(Number.isFinite(declared)&&declared>MAX_RESPONSE_BYTES){
+  await result.body?.cancel();
+  throw new Error("slot_response_too_large");
+ }
+ // Stream safely; a giant historical block should not exhaust worker memory.
+ let payload:{
   result?:{transactions?:Transaction[];blockHeight?:number}|null;
   error?:{code?:number}
  };
+ if(result.body){
+  const reader=result.body.getReader();
+  const chunks:Uint8Array[]=[];
+  let size=0;
+  try{
+   while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    if(!value)continue;
+    size+=value.byteLength;
+    if(size>MAX_RESPONSE_BYTES)throw new Error("slot_response_too_large");
+    chunks.push(value);
+   }
+  }finally{
+   if(size>MAX_RESPONSE_BYTES)await reader.cancel();
+   reader.releaseLock();
+  }
+  payload=JSON.parse(Buffer.concat(chunks).toString("utf8")) as typeof payload;
+ }else{
+  // Supports a deliberately small test stub without a readable response body.
+  payload=await result.json() as typeof payload;
+ }
  if(payload.error||!payload.result||!Array.isArray(payload.result.transactions))
    throw new Error("slot_rpc_unavailable_or_malformed");
  if(payload.result.transactions.length>5000)throw new Error("slot_sample_too_large");
