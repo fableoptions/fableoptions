@@ -217,7 +217,8 @@ export class FableStore {
       LEFT JOIN token_ownership_audits a ON a.mint=l.mint
       LEFT JOIN token_ownership_audit_failures f ON f.mint=l.mint
       WHERE l.first_seen>=now()-interval '2 days'
-        AND l.latest_market_cap_usd>=300000
+        -- Low-cap validation samples are NOT options eligibility approvals.
+        AND l.latest_market_cap_usd>=100000
         AND l.last_price_at>now()-interval '10 minutes'
         AND (a.checked_at IS NULL OR a.checked_at<now()-interval '30 minutes')
         AND (f.next_attempt_at IS NULL OR f.next_attempt_at<=now())
