@@ -1,0 +1,24 @@
+name: Read-only candidate options program mainnet attestation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/venue-mainnet-attestation.yml'
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      # Published in nankolib/opta README; this is a candidate claim only.
+      VENUE_PROGRAM_ID: CtzJ4MJYX6BFvF4g67i5C24tQuwRn6ddKkaE5L84z9Cq
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Inspect finalized mainnet program and loader
+        run: npm run verify:venue:program
