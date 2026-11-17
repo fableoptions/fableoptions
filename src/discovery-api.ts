@@ -8,6 +8,7 @@ import { RfqStore } from "./options/rfq-store.js";
 import { venueReadiness } from "./options/venue-readiness.js";
 import { venueCandidateReport } from "./options/venue-candidates.js";
 import { assessTrackedToken } from "./options/token-risk-view.js";
+import { assessExpiryCapWindow } from "./options/expiry-reference.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
 await store.init();
 const rfqStore = new RfqStore(process.env.DATABASE_URL ?? "");
@@ -95,6 +96,22 @@ const server = createServer(async (request, response) => {
       const data = await store.scannerHealth();
       response.writeHead(200);
       response.end(JSON.stringify(data)); return;
+    }
+    if (path === "/v1/options/expiry-reference") {
+      const mint=url.searchParams.get("mint")??"";
+      const endString=url.searchParams.get("endAt")??"";
+      const minutes=Number(url.searchParams.get("windowMinutes")??"30");
+      const endAt=new Date(endString);
+      if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)||
+         !endString||!Number.isFinite(endAt.getTime())||
+         !Number.isInteger(minutes)||minutes<10||minutes>60||
+         endAt.getTime()>Date.now()+30000){
+        response.writeHead(400);response.end(JSON.stringify({error:"invalid_reference_parameters"}));return;
+      }
+      const startAt=new Date(endAt.getTime()-minutes*60000);
+      const observations=await store.marketCapObservations(mint,startAt,endAt);
+      const reference=assessExpiryCapWindow(mint,observations,startAt,endAt);
+      response.writeHead(200);response.end(JSON.stringify(reference));return;
     }
     if (path === "/v1/options/token-risk") {
       const mint=url.searchParams.get("mint")??"";
