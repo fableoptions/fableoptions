@@ -41,7 +41,7 @@ test("stores raw holder signals but never creates a verified bundle claim", {tim
   assert.equal(risk.ownershipEvidence.bundleProven,false);
   assert.ok(risk.reasons.includes("UNCLASSIFIED_OWNERSHIP_CONCENTRATION_REVIEW"));
   // Future or spoofed RPC results may not claim verified clustering.
-  await assert.rejects(store.recordOwnershipAudit({...audit,walletClustersVerified:true}));
+  await assert.rejects(store.recordOwnershipAudit({...audit,walletClustersVerified:true} as unknown as OwnershipAudit));
   // Old slots cannot overwrite newer evidence.
   await store.recordOwnershipAudit({...audit,contextSlot:100,topTokenAccountPct:0});
   const reread=await store.tokenRiskRow(mint);
