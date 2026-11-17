@@ -25,6 +25,12 @@ npm run scanner
 
 Environment variables: `POLL_INTERVAL_MS` (default 30000), `THRESHOLD_USD` (default 300000), `GECKO_PAGES` (default 2). Public GeckoTerminal API availability and rate limits may change.
 
+## Persistent monitoring (experimental)
+
+Run `npm run monitor` to discover new Solana pools and keep a JSON snapshot at `data/tokens.json` across restarts. The monitor rotates through up to 20 previously discovered mints per cycle (configurable with `MAX_TRACKED_PER_CYCLE`) and refreshes their pool data. This is **not complete Pump.fun coverage**, not an onchain launch stream, and not production-safe storage. With enough tracked tokens and API rate limits, updates may be delayed significantly.
+
+The persistent monitor is a separate experimental entry point from `npm run scanner`. Set `STATE_FILE` to change its snapshot path. Do not run multiple writers on the same file. No verified Pump.fun provenance or options trading is implemented.
+
 ## Next gates
 
 1. Verify the options venue's mainnet deployment, independent audits, SDK, token eligibility and funded counterparties.
