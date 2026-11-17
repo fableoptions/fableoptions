@@ -29,8 +29,9 @@ test("preserves review-only slot acquisition signals and stores failures separat
   const risk=assessTrackedToken(row,now);
   assert.ok(risk.reasons.includes("POSSIBLE_COORDINATED_LAUNCH"));
   assert.equal(risk.launchSlotEvidence.bundleProven,false);
-  await assert.rejects(store.recordLaunchSlotAudit({...signal,bundlesProven:true}
-   as unknown as SlotAcquisitionSignal));
+  await assert.rejects(store.recordLaunchSlotAudit(
+   {...signal,bundlesProven:true} as unknown as SlotAcquisitionSignal
+  ));
   // A later failed RPC must not destroy valid partial evidence.
   await store.recordLaunchSlotFailure(mint,12345,"RPC unavailable");
   assert.equal((await store.tokenRiskRow(mint)).slot_analysis_status,"partial");
