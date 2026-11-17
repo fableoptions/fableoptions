@@ -21,96 +21,111 @@
     "C5xph2yL6gMdxmuLGxJBkGpmuDFfyi5fqkBNhvL6pump",
     "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump"
   ];
-  const images = new Map();
+  const images = new Map(); // Only stores successfully loaded image URLs.
+  const sourceKind = new Map();
   const reduced = !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
-  function selectedIndex() {
-    const i = tokenButtons.findIndex(button => button.getAttribute("aria-pressed") === "true");
-    return i < 0 ? 0 : i;
-  }
-  function setStatus(value) {
-    if (status) status.textContent = value;
-  }
-  function syncFeaturedImage() {
-    const index = selectedIndex();
-    const url = images.get(mintList[index]);
-    const button = tokenButtons[index];
-    if (!cardImage || !cardFallback) return;
-    if (url) {
-      cardImage.src = url;
-      cardImage.alt = "Verified-address token metadata thumbnail";
-      cardImage.hidden = false;
-      cardFallback.hidden = true;
-      setStatus("Coin artwork from token-pair metadata · identity not audited");
-    } else {
-      cardImage.removeAttribute("src");
-      cardImage.hidden = true;
-      cardFallback.hidden = false;
-      setStatus("Artwork unavailable from metadata provider");
-    }
-    button?.setAttribute("aria-label", "Selected " + (root.querySelector("#orbit-coin-name")?.textContent || "coin"));
-  }
-  function setImage(button, url) {
-    const holder = button.querySelector(".orbit-token-symbol");
-    if (!holder) return;
-    const icon = document.createElement("img");
-    icon.className = "orbit-coin-art";
-    icon.alt = "";
-    icon.loading = "lazy";
-    icon.referrerPolicy = "no-referrer";
-    icon.decoding = "async";
-    icon.addEventListener("load", () => {
-      holder.classList.add("has-coin-art");
-      holder.appendChild(icon);
-      syncFeaturedImage();
-    }, {once:true});
-    icon.addEventListener("error", () => { icon.remove(); }, {once:true});
-    icon.src = url;
-  }
-  const safeImage = input => {
-    if (typeof input !== "string" || input.length > 1200) return null;
+  const safeImage = value => {
+    if(typeof value !== "string" || value.length>1200)return null;
     try {
-      const parsed = new URL(input);
-      if (parsed.protocol !== "https:" || !parsed.hostname) return null;
-      return parsed.href;
-    } catch { return null; }
+      const u = new URL(value,window.location.href);
+      if(u.protocol !== "https:" && u.origin !== window.location.origin)return null;
+      return u.href;
+    }catch{return null;}
   };
-  async function loadMetadata() {
-    // All images are served by their source hosts, never invented URLs.
-    // Don't consume scanner risk data or treat these images as market verification.
-    if (typeof fetch !== "function") return;
-    const url = "https://api.dexscreener.com/tokens/v1/solana/" + mintList.join(",");
-    const controller = new AbortController();
-    const stop = window.setTimeout(() => controller.abort(), 9000);
-    try {
-      const response = await fetch(url, {signal:controller.signal,credentials:"omit",cache:"no-store"});
-      if (!response.ok) throw new Error("metadata_service_unavailable");
-      const pairs = await response.json();
-      if (!Array.isArray(pairs)) throw new Error("unexpected_metadata_shape");
-      for (const mint of mintList) {
-        const matches = pairs.filter(pair =>
-          pair?.chainId === "solana" && pair?.baseToken?.address === mint &&
-          Number.isFinite(pair?.liquidity?.usd));
-        matches.sort((a,b) => Number(b.liquidity.usd) - Number(a.liquidity.usd));
-        const image = matches.map(pair => safeImage(pair?.info?.imageUrl)).find(Boolean);
-        if (image) images.set(mint, image);
-      }
-      tokenButtons.forEach((button,index) => {
-        const image = images.get(mintList[index]);
-        if (image) setImage(button,image);
-      });
-      syncFeaturedImage();
-    } catch {
-      setStatus("Live coin image lookup unavailable · illustrative icons shown");
-    } finally { window.clearTimeout(stop); }
+  const localImage = (mint,path) => {
+    // The checked-in manifest can only reference local static image assets.
+    if(typeof path !== "string" || !new RegExp("^/coin-art/"+mint+"\\.(png|jpg|webp|gif|avif)$").test(path))return null;
+    return new URL(path,window.location.origin).href;
+  };
+  function selectedIndex(){
+    const i=tokenButtons.findIndex(button=>button.getAttribute("aria-pressed")==="true");
+    return i<0?0:i;
   }
-  if (typeof MutationObserver === "function") {
-    const nameNode = root.querySelector("#orbit-coin-name");
-    if (nameNode) new MutationObserver(syncFeaturedImage)
-      .observe(nameNode,{characterData:true,childList:true,subtree:true});
+  function syncFeaturedImage(){
+    const index=selectedIndex(),mint=mintList[index];
+    const url=images.get(mint);
+    if(!cardImage || !cardFallback)return;
+    if(url){
+      if(cardImage.src!==url)cardImage.src=url;
+      cardImage.alt="Artwork for selected Pump.fun token";
+      cardImage.hidden=false;
+      cardFallback.hidden=true;
+    }else{
+      cardImage.removeAttribute("src");
+      cardImage.hidden=true;
+      cardFallback.hidden=false;
+    }
+    if(status)status.textContent=url
+      ?(sourceKind.get(mint)==="local"?"Coin artwork cached from Pump.fun metadata":"Coin artwork from public token metadata")
+      :"Coin image not available; showing fallback";
+  }
+  // Append before assigning src so lazy image loading works reliably in
+  // Safari, Chrome and mobile browsers. Show text only when image actually fails.
+  function setImage(button,mint,url,kind){
+    const holder=button?.querySelector(".orbit-token-symbol");
+    if(!holder || images.has(mint) || holder.querySelector("img"))return;
+    const icon=document.createElement("img");
+    icon.className="orbit-coin-art";
+    icon.alt="";
+    icon.loading="eager"; // Five visible hero icons; don't defer until scroll.
+    icon.decoding="async";
+    icon.referrerPolicy="no-referrer";
+    icon.addEventListener("load",()=>{
+      holder.classList.add("has-coin-art");
+      images.set(mint,url);
+      sourceKind.set(mint,kind);
+      syncFeaturedImage();
+    },{once:true});
+    icon.addEventListener("error",()=>{
+      icon.remove();
+      holder.classList.remove("has-coin-art");
+      images.delete(mint);
+      syncFeaturedImage();
+    },{once:true});
+    holder.appendChild(icon);
+    icon.src=url;
+  }
+  async function loadCachedArtwork(){
+    try{
+      const response=await fetch("/coin-art/manifest.json",{credentials:"omit",cache:"no-cache"});
+      if(!response.ok)throw Error("manifest_unavailable");
+      const manifest=await response.json();
+      if(manifest?.schemaVersion!==1||typeof manifest.images!=="object")throw Error("invalid_manifest");
+      mintList.forEach((mint,index)=>{
+        const url=localImage(mint,manifest.images[mint]);
+        if(url)setImage(tokenButtons[index],mint,url,"local");
+      });
+    }catch{/* Fall back to remote metadata when cache is unavailable. */}
+  }
+  async function loadRemoteArtwork(){
+    const url="https://api.dexscreener.com/tokens/v1/solana/"+mintList.join(",");
+    const controller=new AbortController();
+    const stop=window.setTimeout(()=>controller.abort(),8000);
+    try{
+      const response=await fetch(url,{signal:controller.signal,credentials:"omit",cache:"default"});
+      if(!response.ok)throw Error("market_metadata_unavailable");
+      const pairs=await response.json();
+      if(!Array.isArray(pairs))throw Error("invalid_metadata");
+      mintList.forEach((mint,index)=>{
+        const button=tokenButtons[index];
+        if(images.has(mint)||button?.querySelector("img"))return;
+        const matches=pairs.filter(p=>p?.chainId==="solana"&&p?.baseToken?.address===mint);
+        matches.sort((a,b)=>Number(b?.liquidity?.usd||0)-Number(a?.liquidity?.usd||0));
+        const image=matches.map(p=>safeImage(p?.info?.imageUrl)).find(Boolean);
+        if(image)setImage(button,mint,image,"remote");
+      });
+    }catch{/* Never invent a coin image if a provider fails. */}
+    finally{window.clearTimeout(stop);syncFeaturedImage();}
+  }
+  if(typeof MutationObserver==="function"){
+    const nameNode=root.querySelector("#orbit-coin-name");
+    if(nameNode)new MutationObserver(syncFeaturedImage)
+      .observe(nameNode,{childList:true,characterData:true,subtree:true});
   }
   syncFeaturedImage();
-  void loadMetadata();
+  // Own-origin cached artwork is primary; remote metadata only fills gaps.
+  void loadCachedArtwork().then(loadRemoteArtwork);
 
   // The globe is decorative; explicit token buttons provide keyboard control.
   if (!canvas?.getContext) return;
