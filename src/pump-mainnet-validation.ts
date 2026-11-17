@@ -25,9 +25,15 @@ async function rpc(method:string,params:unknown[]):Promise<unknown>{
  return json.result;
 }
 const signatures=await fetchRecentPumpSignatures(rpcUrl,limit);
+const knownSignature=process.env.VERIFY_KNOWN_SIGNATURE??"";
+const knownMint=process.env.VERIFY_KNOWN_MINT??"";
+if(Boolean(knownSignature)!==Boolean(knownMint))throw new Error("Both known signature and mint are required");
 let fetched=0,failed=0,decoded=0,matched=0,excluded=0;
+let knownSignatureMatched=false;
 const examples:Array<{signature:string;slot:number;mints:string[];accountConsistent:boolean}>=[];
-for(const sig of signatures){
+const targets=[...signatures];
+if(knownSignature && !targets.some(x=>x.signature===knownSignature))targets.push({signature:knownSignature,slot:0,err:null});
+for(const sig of targets){
  if(sig.err!==null)continue;
  try{
    const tx=await rpc("getTransaction",[sig.signature,{
@@ -37,6 +43,7 @@ for(const sig of signatures){
    fetched++;
    const launches=decodeLaunches(tx),check=verifyPumpTransaction(tx);
    decoded+=launches.length;matched+=check.verifiedLaunches.length;excluded+=check.excludedLaunches.length;
+   if(sig.signature===knownSignature)knownSignatureMatched=check.verifiedLaunches.some(x=>x.mint===knownMint);
    if(launches.length)examples.push({
      signature:sig.signature,slot:sig.slot,mints:check.verifiedLaunches.map(x=>x.mint),
      accountConsistent:check.completelyVerified
@@ -51,7 +58,8 @@ const report={
  decodedLaunchInstructions:decoded,accountMatchedLaunches:matched,
  excludedLaunches:excluded,
  examples:examples.slice(0,8),
- validationPassed:matched>0&&excluded===0,
+ knownSignatureMatched:knownSignature ? knownSignatureMatched : null,
+ validationPassed:knownSignature ? knownSignatureMatched && excluded===0 : matched>0&&excluded===0,
  completenessVerified:false,
  note:"Sampling successful program transactions does not measure recall or false negatives across all Pump.fun launches."
 };
