@@ -7,6 +7,7 @@ import { theoreticalCappedOption, validateModelInput, type ModelInput } from "./
 import { RfqStore } from "./options/rfq-store.js";
 import { venueReadiness } from "./options/venue-readiness.js";
 import { venueCandidateReport } from "./options/venue-candidates.js";
+import { evaluateFableVenue, UNVERIFIED_VENUE_FACTS } from "./options/venue-compatibility.js";
 import { assessTrackedToken } from "./options/token-risk-view.js";
 import { assessExpiryCapWindow, assessExpiryTokenPriceWindow } from "./options/expiry-reference.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
@@ -65,6 +66,18 @@ const server = createServer(async (request, response) => {
         response.writeHead(400);response.end(JSON.stringify({error:"invalid_input",details:errors}));return;
       }
       response.writeHead(200);response.end(JSON.stringify(theoreticalCappedOption(input)));return;
+    }
+    if (path === "/v1/options/integration-gates") {
+      response.writeHead(200);
+      response.end(JSON.stringify({
+        contract:"capped_european_cash_settled_sol_token_options",
+        purpose:"mainnet_venue_integration_research",
+        ...evaluateFableVenue(UNVERIFIED_VENUE_FACTS),
+        acceptingDeposits:false,
+        optionsTradingEnabled:false,
+        evidenceSource:"No venue certified for Fable; this is not a wallet or deposit endpoint"
+      }));
+      return;
     }
     if (path === "/v1/options/venue-candidates") {
       response.writeHead(200);
