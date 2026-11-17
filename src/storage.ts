@@ -71,12 +71,18 @@ export class FableStore {
     try {
       await c.query("BEGIN");
       const previous = await c.query(
-        "SELECT latest_market_cap_usd FROM launches WHERE mint=$1 FOR UPDATE", [sample.mint]
+        "SELECT latest_market_cap_usd,last_price_at FROM launches WHERE mint=$1 FOR UPDATE", [sample.mint]
       );
       if (!previous.rows.length) { await c.query("ROLLBACK"); return null; }
       const oldCap = previous.rows[0].latest_market_cap_usd as number | null;
+      const previousAt: Date | null = previous.rows[0].last_price_at;
+      // A large observation gap cannot prove when the threshold was crossed.
+      const recentPrevious = previousAt instanceof Date &&
+        sample.observedAt.getTime() >= previousAt.getTime() &&
+        sample.observedAt.getTime() - previousAt.getTime() <= 15*60*1000;
       const type: PriceEvent = sample.marketCapUsd >= thresholdUsd
-        ? oldCap === null ? "first_seen_above" : oldCap < thresholdUsd ? "crossed_up" : null
+        ? oldCap === null || !recentPrevious ? "first_seen_above"
+          : oldCap < thresholdUsd ? "crossed_up" : null
         : null;
       await c.query(
         `UPDATE launches SET latest_market_cap_usd=$2, latest_liquidity_usd=$3,
@@ -122,7 +128,7 @@ export class FableStore {
 
   /** Operational sampling health; failures and missing observations are visible, not hidden. */
   async scannerHealth() {
-    const [launches, jobs, markets, crossings] = await Promise.all([
+    const [launches, jobs, markets, crossings, reconciliation] = await Promise.all([
       this.pool.query(`SELECT count(*)::int AS total,
         count(*) FILTER (WHERE first_seen > now() - interval '1 hour')::int AS last_hour,
         max(first_seen) AS latest_at FROM launches`),
@@ -135,7 +141,10 @@ export class FableStore {
         max(last_price_at) AS latest_sample_at FROM launches`),
       this.pool.query(`SELECT count(*)::int AS total,
         count(*) FILTER (WHERE observed_at > now() - interval '1 day')::int AS last_day,
-        max(observed_at) AS latest_at FROM crossing_events`)
+        max(observed_at) AS latest_at FROM crossing_events`),
+      this.pool.query(`SELECT newest_signature,last_success_at,last_attempt_at,scanned_last,queued_last,
+        gap_last,gap_count,last_error,coverage
+        FROM pump_reconciliation WHERE singleton=TRUE`)
     ]);
     return {
       asOf: new Date().toISOString(),
@@ -145,7 +154,8 @@ export class FableStore {
         latestDecodedLaunchAt: launches.rows[0].latest_at,
         signatureJobsByState: Object.fromEntries(jobs.rows.map(x => [x.state, x.count])),
         coverageComplete: false,
-        latestVerifiedOnchainComparison: null
+        latestVerifiedOnchainComparison: null,
+        boundedRecovery: reconciliation.rows[0] ?? null
       },
       marketSampling: {
         ...markets.rows[0],
@@ -158,7 +168,8 @@ export class FableStore {
         lastDay: crossings.rows[0].last_day,
         latestObservedAt: crossings.rows[0].latest_at,
         thresholdUsd: 300000,
-        completenessGuaranteed: false
+        completenessGuaranteed: false,
+        timing: "sampled observations; not exact onchain crossing times"
       },
       healthLimits: [
         "Stats reflect this database only, not complete Pump.fun coverage.",
