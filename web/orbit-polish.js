@@ -160,7 +160,7 @@
   }
   function drawLine(points,opacity) {
     if (points.length<2) return;
-    ctx.strokeStyle="rgba(37,73,52,"+opacity+")";
+    ctx.strokeStyle="rgba(116,95,150,"+opacity+")";
     ctx.lineWidth=.85;
     ctx.beginPath();
     points.forEach((pt,i) => i?ctx.lineTo(pt.x,pt.y):ctx.moveTo(pt.x,pt.y));
@@ -192,7 +192,7 @@
     ctx.beginPath();
     ctx.arc(cx,cy,radius,Math.PI,2*Math.PI);
     ctx.lineWidth=1;
-    ctx.strokeStyle="rgba(43,83,54,.15)";
+    ctx.strokeStyle="rgba(116,95,150,.15)";
     ctx.stroke();
     ctx.restore();
   }
