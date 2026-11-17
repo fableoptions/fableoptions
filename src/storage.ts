@@ -1,0 +1,124 @@
+import pg from "pg";
+
+const { Pool } = pg;
+export type LaunchRecord = { mint: string; signature: string; slot: number; name: string; symbol: string; uri: string; instruction: string };
+export type MarketSample = { mint: string; marketCapUsd: number; poolLiquidityUsd: number | null; poolAddress: string; observedAt: Date };
+export type PriceEvent = "crossed_up" | "first_seen_above" | null;
+
+export class FableStore {
+  private pool: pg.Pool;
+  constructor(databaseUrl: string) {
+    if (!databaseUrl) throw new Error("DATABASE_URL is required");
+    this.pool = new Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 8000 });
+  }
+  async init(): Promise<void> {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS launches (
+        mint TEXT PRIMARY KEY,
+        signature TEXT NOT NULL,
+        slot BIGINT NOT NULL,
+        token_name TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        metadata_uri TEXT NOT NULL,
+        instruction TEXT NOT NULL,
+        first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
+        latest_market_cap_usd DOUBLE PRECISION,
+        latest_liquidity_usd DOUBLE PRECISION,
+        latest_pool TEXT,
+        last_price_at TIMESTAMPTZ,
+        next_poll_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS launches_next_poll_idx ON launches (next_poll_at);
+      CREATE TABLE IF NOT EXISTS crossing_events (
+        id BIGSERIAL PRIMARY KEY,
+        mint TEXT NOT NULL REFERENCES launches(mint),
+        event_type TEXT NOT NULL CHECK (event_type IN ('crossed_up', 'first_seen_above')),
+        previous_market_cap_usd DOUBLE PRECISION,
+        market_cap_usd DOUBLE PRECISION NOT NULL,
+        pool_liquidity_usd DOUBLE PRECISION,
+        pool_address TEXT NOT NULL,
+        observed_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS crossing_events_created_idx ON crossing_events (created_at DESC);
+    `);
+  }
+  async recordLaunch(launch: LaunchRecord): Promise<boolean> {
+    const result = await this.pool.query(
+      `INSERT INTO launches(mint,signature,slot,token_name,symbol,metadata_uri,instruction)
+       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(mint) DO NOTHING`,
+      [launch.mint, launch.signature, launch.slot, launch.name, launch.symbol, launch.uri, launch.instruction]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+  async dueTokens(limit = 10): Promise<Array<{ mint: string; symbol: string }>> {
+    const result = await this.pool.query(
+      `SELECT mint, symbol FROM launches WHERE next_poll_at <= now()
+       ORDER BY next_poll_at ASC, first_seen DESC LIMIT $1`, [Math.min(Math.max(limit, 1), 100)]
+    );
+    return result.rows as Array<{ mint: string; symbol: string }>;
+  }
+  async deferToken(mint: string, seconds: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE launches SET next_poll_at = now() + $2 * interval '1 second' WHERE mint=$1`,
+      [mint, Math.max(20, Math.min(86400, Math.floor(seconds)))]
+    );
+  }
+  async recordPrice(sample: MarketSample, thresholdUsd = 300000): Promise<PriceEvent> {
+    if (!(sample.marketCapUsd > 0) || !Number.isFinite(sample.marketCapUsd) ||
+        !Number.isFinite(thresholdUsd) || thresholdUsd <= 0) throw new Error("Invalid market cap");
+    const c = await this.pool.connect();
+    try {
+      await c.query("BEGIN");
+      const previous = await c.query(
+        "SELECT latest_market_cap_usd FROM launches WHERE mint=$1 FOR UPDATE", [sample.mint]
+      );
+      if (!previous.rows.length) { await c.query("ROLLBACK"); return null; }
+      const oldCap = previous.rows[0].latest_market_cap_usd as number | null;
+      const type: PriceEvent = sample.marketCapUsd >= thresholdUsd
+        ? oldCap === null ? "first_seen_above" : oldCap < thresholdUsd ? "crossed_up" : null
+        : null;
+      await c.query(
+        `UPDATE launches SET latest_market_cap_usd=$2, latest_liquidity_usd=$3,
+         latest_pool=$4, last_price_at=$5,
+         next_poll_at=$5 + $6 * interval '1 second' WHERE mint=$1`,
+        [sample.mint, sample.marketCapUsd, sample.poolLiquidityUsd, sample.poolAddress,
+         sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300]
+      );
+      if (type) {
+        await c.query(
+          `INSERT INTO crossing_events(mint,event_type,previous_market_cap_usd,
+           market_cap_usd,pool_liquidity_usd,pool_address,observed_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7)`,
+          [sample.mint,type,oldCap,sample.marketCapUsd,sample.poolLiquidityUsd,
+           sample.poolAddress,sample.observedAt]
+        );
+      }
+      await c.query("COMMIT");
+      return type;
+    } catch (err) {
+      await c.query("ROLLBACK");
+      throw err;
+    } finally { c.release(); }
+  }
+  async recentCrossings(limit=50) {
+    const result = await this.pool.query(
+      `SELECT c.id,c.mint,l.symbol,l.token_name,c.event_type,c.previous_market_cap_usd,
+         c.market_cap_usd,c.pool_liquidity_usd,c.pool_address,c.observed_at
+         FROM crossing_events c JOIN launches l ON l.mint=c.mint
+         ORDER BY c.id DESC LIMIT $1`,
+      [Math.min(Math.max(limit, 1), 100)]
+    );
+    return result.rows;
+  }
+  async recentLaunches(limit=50) {
+    const result = await this.pool.query(
+      `SELECT mint,symbol,token_name,signature,slot,first_seen,latest_market_cap_usd,
+         latest_liquidity_usd,last_price_at FROM launches
+       ORDER BY first_seen DESC LIMIT $1`,[Math.min(Math.max(limit,1),100)]
+    );
+    return result.rows;
+  }
+  async ping() { await this.pool.query("SELECT 1"); }
+  async close() { await this.pool.end(); }
+}
