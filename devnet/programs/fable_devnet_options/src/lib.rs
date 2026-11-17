@@ -80,7 +80,7 @@ pub mod fable_devnet_options {
         position.phase = Phase::Offered;
 
         token_interface::transfer_checked(
-            CpiContext::new(ctx.accounts.token_program.to_account_info(), TransferChecked {
+            CpiContext::new(ctx.accounts.token_program.key(), TransferChecked {
                 mint: ctx.accounts.test_usdc_mint.to_account_info(),
                 from: ctx.accounts.writer_tokens.to_account_info(),
                 to: ctx.accounts.vault.to_account_info(),
@@ -102,7 +102,7 @@ pub mod fable_devnet_options {
         require!(ctx.accounts.vault.amount >= pos.cap_micro, DevnetError::VaultNotFunded);
 
         token_interface::transfer_checked(
-            CpiContext::new(ctx.accounts.token_program.to_account_info(), TransferChecked {
+            CpiContext::new(ctx.accounts.token_program.key(), TransferChecked {
                 mint: ctx.accounts.test_usdc_mint.to_account_info(),
                 from: ctx.accounts.buyer_tokens.to_account_info(),
                 to: ctx.accounts.writer_tokens.to_account_info(),
@@ -157,7 +157,7 @@ pub mod fable_devnet_options {
         let signer: &[&[&[u8]]] = &[seeds];
         if payout > 0 {
             token_interface::transfer_checked(
-                CpiContext::new(ctx.accounts.token_program.to_account_info(), TransferChecked {
+                CpiContext::new(ctx.accounts.token_program.key(), TransferChecked {
                     mint: ctx.accounts.test_usdc_mint.to_account_info(),
                     from: ctx.accounts.vault.to_account_info(),
                     to: ctx.accounts.buyer_tokens.to_account_info(),
@@ -168,7 +168,7 @@ pub mod fable_devnet_options {
         }
         if refund > 0 {
             token_interface::transfer_checked(
-                CpiContext::new(ctx.accounts.token_program.to_account_info(), TransferChecked {
+                CpiContext::new(ctx.accounts.token_program.key(), TransferChecked {
                     mint: ctx.accounts.test_usdc_mint.to_account_info(),
                     from: ctx.accounts.vault.to_account_info(),
                     to: ctx.accounts.writer_tokens.to_account_info(),
@@ -178,7 +178,7 @@ pub mod fable_devnet_options {
             )?;
         }
         token_interface::close_account(
-            CpiContext::new(ctx.accounts.token_program.to_account_info(), CloseAccount {
+            CpiContext::new(ctx.accounts.token_program.key(), CloseAccount {
                 account: ctx.accounts.vault.to_account_info(),
                 destination: ctx.accounts.writer.to_account_info(),
                 authority: pos.to_account_info(),
@@ -188,7 +188,7 @@ pub mod fable_devnet_options {
     }
 
     // Unsold offer: only original writer may cancel, all vault tokens refunded.
-    pub fn cancel_unsold(ctx: Context<WriterRefund>) -> Result<()> {
+    pub fn cancel_unsold(mut ctx: Context<WriterRefund>) -> Result<()> {
         require!(ctx.accounts.position.phase == Phase::Offered, DevnetError::InvalidPhase);
         require!(ctx.accounts.writer.to_account_info().is_signer, DevnetError::WriterMustSign);
         return_to_writer(&mut ctx.accounts, Phase::Cancelled)
@@ -197,7 +197,7 @@ pub mod fable_devnet_options {
     // Devnet-only liveness escape hatch. If mock oracle failed to report
     // after one hour, collateral returns to writer. Buyer premium is NOT
     // refunded: this is an unacceptable mainnet consumer-protection design.
-    pub fn refund_without_price(ctx: Context<WriterRefund>) -> Result<()> {
+    pub fn refund_without_price(mut ctx: Context<WriterRefund>) -> Result<()> {
         let pos = &ctx.accounts.position;
         require!(pos.phase == Phase::Live, DevnetError::InvalidPhase);
         require!(Clock::get()?.unix_timestamp > pos.expiry_unix.saturating_add(PRICE_GRACE),
@@ -218,7 +218,7 @@ fn return_to_writer(accounts: &mut WriterRefund<'_>, next: Phase) -> Result<()> 
     require!(amount >= pos.cap_micro, DevnetError::VaultNotFunded);
     if amount > 0 {
         token_interface::transfer_checked(
-            CpiContext::new(accounts.token_program.to_account_info(), TransferChecked {
+            CpiContext::new(accounts.token_program.key(), TransferChecked {
                 mint: accounts.test_usdc_mint.to_account_info(),
                 from: accounts.vault.to_account_info(),
                 to: accounts.writer_tokens.to_account_info(),
@@ -228,7 +228,7 @@ fn return_to_writer(accounts: &mut WriterRefund<'_>, next: Phase) -> Result<()> 
         )?;
     }
     token_interface::close_account(
-        CpiContext::new(accounts.token_program.to_account_info(), CloseAccount {
+        CpiContext::new(accounts.token_program.key(), CloseAccount {
             account: accounts.vault.to_account_info(),
             destination: accounts.writer.to_account_info(),
             authority: pos.to_account_info(),
