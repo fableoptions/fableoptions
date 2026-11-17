@@ -6,14 +6,15 @@
   "scripts": {
     "scanner": "tsx src/scanner.ts",
     "check": "tsc --noEmit",
-    "test": "node --import tsx --test src/*.test.ts",
+    "test": "node --import tsx --test src/*.test.ts src/options/*.test.ts",
     "monitor": "tsx src/monitor.ts",
     "pump:stream": "tsx src/pump-stream.ts",
     "pump:launches": "tsx src/pump-launches.ts",
     "price:worker": "tsx src/price-worker.ts",
     "api": "tsx src/discovery-api.ts",
     "backfill:pump": "tsx src/pump-backfill.ts",
-    "rfq:api": "tsx src/options/rfq-api.ts"
+    "rfq:api": "tsx src/options/rfq-api.ts",
+    "test:rfq-integration": "node --import tsx src/options/rfq-http.integration.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
