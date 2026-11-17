@@ -8,6 +8,7 @@ import { FableStore } from "./storage.js";
 import { fetchDexObservations, MarketRateLimitError } from "./market-provider.js";
 import { fetchPumpCurveSnapshots, fetchSolUsd } from "./pump-curve-provider.js";
 import { fetchOwnershipAudit } from "./options/ownership-audit.js";
+import { fetchLaunchSlot } from "./options/launch-slot-analysis.js";
 const store=new FableStore(process.env.DATABASE_URL??"");
 await store.init();
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
@@ -92,6 +93,30 @@ while(active){
           // A failed RPC check cannot mark ownership safe or unlocked.
           process.stderr.write("[fable] ownership audit unavailable: "+
             (error instanceof Error?error.message:"unknown")+"\\n");
+        }
+      }
+      // One historical block read per ~40 batches, only for tokens already
+      // above threshold. Blocks can be large and RPC may reject old slots.
+      if(batchNumber%40===0 && rpcUrl.startsWith("https://")){
+        const candidate=await store.dueLaunchSlotAudit();
+        if(candidate) {
+          try {
+            const report=await fetchLaunchSlot(
+              rpcUrl,candidate.mint,candidate.slot,candidate.signature
+            );
+            await store.recordLaunchSlotAudit(report);
+            process.stderr.write("[fable] launch slot signal "+JSON.stringify({
+              mint:candidate.mint,slot:report.slot,
+              positiveBalanceTransactions:report.transactionCountWithPositiveBalanceDelta,
+              distinctReportedOwners:report.distinctReportedOwners,
+              possibleCoordination:report.possibleCoordination,
+              bundlesProven:false,fraudProven:false
+            })+"\\n");
+          }catch(error){
+            const reason=error instanceof Error?error.message:"unknown";
+            await store.recordLaunchSlotFailure(candidate.mint,candidate.slot,reason);
+            process.stderr.write("[fable] historical launch slot unavailable: "+reason+"\\n");
+          }
         }
       }
       process.stderr.write("[fable] market batch "+JSON.stringify({
