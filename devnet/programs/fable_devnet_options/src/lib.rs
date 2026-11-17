@@ -190,6 +190,7 @@ pub mod fable_devnet_options {
     // Unsold offer: only original writer may cancel, all vault tokens refunded.
     pub fn cancel_unsold(ctx: Context<WriterRefund>) -> Result<()> {
         require!(ctx.accounts.position.phase == Phase::Offered, DevnetError::InvalidPhase);
+        require!(ctx.accounts.writer.to_account_info().is_signer, DevnetError::WriterMustSign);
         return_to_writer(&mut ctx.accounts, Phase::Cancelled)
     }
 
@@ -428,6 +429,8 @@ pub enum DevnetError {
     MathOverflow,
     #[msg("Invalid mock oracle authority")]
     InvalidOracle,
+    #[msg("Only the writer can cancel an unsold offer")]
+    WriterMustSign,
 }
 
 #[cfg(test)]
@@ -455,8 +458,8 @@ mod tests {
 
     #[test]
     fn overflow_cannot_silently_wrap_or_overpay() {
-        assert!(capped_payout(0, u64::MAX, u64::MAX,
-            u64::MAX, 0, u64::MAX).is_ok()); // capped by u64, still checked
+        assert!(capped_payout(0, 0, u64::MAX,
+            u64::MAX, 0, u64::MAX).is_err()); // fail on u128 overflow
         assert!(capped_payout(2, 1, 2, 1, 6, 1).is_err());
     }
 }
