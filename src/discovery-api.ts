@@ -1,6 +1,7 @@
 /** Read-only API. No deposits, execution endpoints or wallet custody. */
 import { createServer } from "node:http";
 import { FableStore } from "./storage.js";
+import { decorateMarketRow } from "./market-freshness.js";
 import { analyzeOption, validatePayoffInput, type PayoffInput } from "./options/analytics.js";
 import { theoreticalCappedOption, validateModelInput, type ModelInput } from "./options/pricing.js";
 import { RfqStore } from "./options/rfq-store.js";
@@ -89,6 +90,11 @@ const server = createServer(async (request, response) => {
       response.end(JSON.stringify({data,rfqSubmissionEnabled:false,quotesExecutable:false,collateralVerified:false}));
       return;
     }
+    if (path === "/v1/scanner/health") {
+      const data = await store.scannerHealth();
+      response.writeHead(200);
+      response.end(JSON.stringify(data)); return;
+    }
     if (path === "/v1/discovery") {
       const data = await store.recentCrossings();
       response.writeHead(200);
@@ -97,7 +103,7 @@ const server = createServer(async (request, response) => {
     if (path === "/v1/launches") {
       const data = await store.recentLaunches();
       response.writeHead(200);
-      response.end(JSON.stringify({data,tradingEnabled:false})); return;
+      response.end(JSON.stringify({data:data.map(row => decorateMarketRow(row)),tradingEnabled:false,marketDataCompletenessGuaranteed:false})); return;
     }
     response.writeHead(404); response.end(JSON.stringify({error:"not_found"}));
   } catch (error) {
