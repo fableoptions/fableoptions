@@ -6,9 +6,9 @@ Open-source foundation for a Solana memecoin options discovery platform.
 
 ## Experimental Solana devnet contract
 
-A **new, unaudited Anchor test program** for USDC-style capped calls/puts lives in [devnet/README.md](devnet/README.md). Its Rust source compiles in GitHub CI. A local offchain lifecycle simulator tests locking test collateral, paying premiums, mock expiry pricing, capped payouts, cancellation, replay rejection and oracle-timeout refund.
+A **new, unaudited Anchor test program** for USDC-style capped calls/puts lives in [devnet/README.md](devnet/README.md). Its Rust source compiles in GitHub CI and [the isolated Solana local-validator execution run](https://github.com/fableoptions/fableoptions/actions/runs/44140237157) **passed** with real test-token transfers through the onchain PDA vault. A separate offchain simulator tests premiums, capped payouts, cancellation, replay rejection and oracle-timeout refund.
 
-**Not deployed on devnet or mainnet; no real-money escrow, oracle, fills or payouts exist.** It is strictly separate from the existing read-only Railway scanner/API. Only six-decimal disposable SPL *test tokens* are permitted by design (Circle's real USDC mint is explicitly rejected).
+**Not deployed on public devnet or mainnet; no real-money escrow, independently verified oracle, fills or payouts exist.** It is strictly separate from the existing read-only Railway scanner/API. Only six-decimal disposable SPL *test tokens* are permitted by design (Circle's real USDC mint is explicitly rejected).
 
 ## First milestone: $300K crossing scanner
 
