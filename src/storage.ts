@@ -7,7 +7,7 @@ import type { CapObservation } from "./options/expiry-reference.js";
 
 const { Pool } = pg;
 export type LaunchRecord = { mint: string; signature: string; slot: number; name: string; symbol: string; uri: string; instruction: string };
-export type MarketSample = { mint: string; marketCapUsd: number; poolLiquidityUsd: number | null; poolAddress: string; observedAt: Date; source?: string };
+export type MarketSample = { mint: string; marketCapUsd: number; poolLiquidityUsd: number | null; poolAddress: string; observedAt: Date; source?: string; tokenPriceUsd?: number | null };
 export type PriceEvent = "crossed_up" | "first_seen_above" | null;
 
 export class FableStore {
@@ -58,11 +58,13 @@ export class FableStore {
         observed_at TIMESTAMPTZ NOT NULL,
         market_cap_usd DOUBLE PRECISION NOT NULL CHECK(market_cap_usd>0),
         liquidity_usd DOUBLE PRECISION,
+        token_price_usd DOUBLE PRECISION CHECK(token_price_usd>0),
         source TEXT NOT NULL,
         pool_address TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE(mint,source,pool_address,observed_at)
       );
+      ALTER TABLE token_market_samples ADD COLUMN IF NOT EXISTS token_price_usd DOUBLE PRECISION;
       CREATE INDEX IF NOT EXISTS token_market_samples_range_idx
         ON token_market_samples(mint,observed_at DESC);
       ALTER TABLE crossing_events ADD COLUMN IF NOT EXISTS price_source TEXT;
@@ -197,13 +199,16 @@ export class FableStore {
          sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,newSource,
          jump.anomalous,jump.ratio,jump.reason]
       );
+      const unitPrice=sample.tokenPriceUsd??null;
+      if(unitPrice!==null && (!Number.isFinite(unitPrice)||unitPrice<=0||unitPrice>=1e9))
+        throw new Error("invalid_token_unit_price");
       await c.query(
         `INSERT INTO token_market_samples
-          (mint,observed_at,market_cap_usd,liquidity_usd,source,pool_address)
-         VALUES($1,$2::timestamptz,$3,$4,$5,$6)
+          (mint,observed_at,market_cap_usd,liquidity_usd,source,pool_address,token_price_usd)
+         VALUES($1,$2::timestamptz,$3,$4,$5,$6,$7)
          ON CONFLICT(mint,source,pool_address,observed_at) DO NOTHING`,
         [sample.mint,sample.observedAt,sample.marketCapUsd,
-         sample.poolLiquidityUsd,newSource,sample.poolAddress]
+         sample.poolLiquidityUsd,newSource,sample.poolAddress,unitPrice]
       );
       if (type) {
         await c.query(
@@ -228,7 +233,8 @@ export class FableStore {
       throw new Error("invalid_market_history_window");
     const rows=await this.pool.query(
       `SELECT observed_at AS "observedAt", market_cap_usd AS "marketCapUsd",
-         liquidity_usd AS "liquidityUsd", source, pool_address AS "poolAddress"
+         liquidity_usd AS "liquidityUsd", token_price_usd AS "tokenPriceUsd",
+         source, pool_address AS "poolAddress"
        FROM token_market_samples
        WHERE mint=$1 AND observed_at >= $2::timestamptz
          AND observed_at <= $3::timestamptz
