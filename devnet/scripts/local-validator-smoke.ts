@@ -128,6 +128,18 @@ async function main(){
 
  // Unsold writer order returns all collateral; no buyer payment.
  const second=await makeOffer(2n,BigInt(Math.floor(Date.now()/1000)+120));
+ // An unrelated caller must not be able to cancel an unsold writer escrow.
+ let unauthorizedCancelDenied=false;
+ try{
+  await send("unauthorized_cancel",ix("cancel_unsold",[
+   k(config),k(testMint),k(second.p,false,true),
+   k(writer.publicKey,false,true),k(writerToken,false,true),
+   k(buyerToken,false,true),k(second.v,false,true),k(TOKEN_PROGRAM_ID)
+  ]),[buyer]);
+ }catch{unauthorizedCancelDenied=true;}
+ if(!unauthorizedCancelDenied)throw new Error("non_writer_cancel_accepted");
+ if((await getAccount(connection,second.v,"confirmed")).amount!==100_000_000n)
+  throw new Error("unauthorized_cancel_changed_vault");
  await send("cancel_unsold",ix("cancel_unsold",[
    k(config),k(testMint),k(second.p,false,true),
    k(writer.publicKey,true,true),k(writerToken,false,true),
@@ -142,7 +154,8 @@ async function main(){
   network:"local-validator-only",notDevnetDeployment:true,
   programId:programId.toBase58(),mint:testMint.toBase58(),
   exercised:["create_offer","buy_offer","reject_unauthorized_price",
-   "publish_mock_expiry","settle_mock","reject_double_settle","cancel_unsold"],
+   "publish_mock_expiry","settle_mock","reject_double_settle",
+   "reject_unauthorized_cancel","cancel_unsold"],
   buyerFinalMicroTestUsd:String(buyerAfter),
   writerFinalMicroTestUsd:String(writerAfter),
   liveUsdcTransferred:false,realMoneyTradingEnabled:false
