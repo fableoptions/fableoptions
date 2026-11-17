@@ -4,9 +4,9 @@
  * This collects transaction signatures only; it does NOT identify launches,
  * token mints, or threshold crossings.
  */
-const url = process.env.SOLANA_WS_URL;
+const url = process.env.SOLANA_WS_URL ?? (process.env.HELIUS_API_KEY ? `wss://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY)}` : undefined);
 const programId = process.env.PUMP_PROGRAM_ID;
-if (!url || !/^wss:\/\//.test(url)) throw new Error("Set SOLANA_WS_URL to a trusted wss:// Solana RPC endpoint");
+if (!url || !/^wss:\/\//.test(url)) throw new Error("Set HELIUS_API_KEY locally or SOLANA_WS_URL to a trusted wss:// Solana RPC endpoint");
 if (!programId || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(programId)) throw new Error("Set PUMP_PROGRAM_ID to a verified Solana program address");
 const reconnectMs = 3000;
 let stopped = false;
