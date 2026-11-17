@@ -9,14 +9,18 @@
     "test": "node --import tsx --test src/*.test.ts",
     "monitor": "tsx src/monitor.ts",
     "pump:stream": "tsx src/pump-stream.ts",
-    "pump:launches": "tsx src/pump-launches.ts"
+    "pump:launches": "tsx src/pump-launches.ts",
+    "price:worker": "tsx src/price-worker.ts",
+    "api": "tsx src/discovery-api.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "@types/pg": "^8.15.5"
   },
   "dependencies": {
-    "bs58": "^6.0.0"
+    "bs58": "^6.0.0",
+    "pg": "^8.16.3"
   }
 }
