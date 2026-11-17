@@ -3,6 +3,7 @@ import { assessMarketJump } from "./market-anomaly.js";
 import type { OwnershipAudit } from "./options/ownership-audit.js";
 import type { SlotAcquisitionSignal } from "./options/launch-slot-analysis.js";
 import type { FundingLinkReport } from "./options/funding-links.js";
+import type { CapObservation } from "./options/expiry-reference.js";
 
 const { Pool } = pg;
 export type LaunchRecord = { mint: string; signature: string; slot: number; name: string; symbol: string; uri: string; instruction: string };
@@ -51,6 +52,19 @@ export class FableStore {
         observed_at TIMESTAMPTZ NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+      CREATE TABLE IF NOT EXISTS token_market_samples (
+        id BIGSERIAL PRIMARY KEY,
+        mint TEXT NOT NULL REFERENCES launches(mint),
+        observed_at TIMESTAMPTZ NOT NULL,
+        market_cap_usd DOUBLE PRECISION NOT NULL CHECK(market_cap_usd>0),
+        liquidity_usd DOUBLE PRECISION,
+        source TEXT NOT NULL,
+        pool_address TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(mint,source,pool_address,observed_at)
+      );
+      CREATE INDEX IF NOT EXISTS token_market_samples_range_idx
+        ON token_market_samples(mint,observed_at DESC);
       ALTER TABLE crossing_events ADD COLUMN IF NOT EXISTS price_source TEXT;
       CREATE INDEX IF NOT EXISTS crossing_events_created_idx ON crossing_events (created_at DESC);
       CREATE TABLE IF NOT EXISTS token_ownership_audits (
@@ -183,6 +197,14 @@ export class FableStore {
          sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,newSource,
          jump.anomalous,jump.ratio,jump.reason]
       );
+      await c.query(
+        `INSERT INTO token_market_samples
+          (mint,observed_at,market_cap_usd,liquidity_usd,source,pool_address)
+         VALUES($1,$2::timestamptz,$3,$4,$5,$6)
+         ON CONFLICT(mint,source,pool_address,observed_at) DO NOTHING`,
+        [sample.mint,sample.observedAt,sample.marketCapUsd,
+         sample.poolLiquidityUsd,newSource,sample.poolAddress]
+      );
       if (type) {
         await c.query(
           `INSERT INTO crossing_events(mint,event_type,previous_market_cap_usd,
@@ -198,6 +220,35 @@ export class FableStore {
       await c.query("ROLLBACK");
       throw err;
     } finally { c.release(); }
+  }
+  async marketCapObservations(mint:string,startAt:Date,endAt:Date):Promise<CapObservation[]> {
+    if(!(startAt instanceof Date)||!(endAt instanceof Date)||
+       !Number.isFinite(startAt.getTime())||!Number.isFinite(endAt.getTime())||
+       endAt.getTime()<=startAt.getTime()||endAt.getTime()-startAt.getTime()>3600000)
+      throw new Error("invalid_market_history_window");
+    const rows=await this.pool.query(
+      `SELECT observed_at AS "observedAt", market_cap_usd AS "marketCapUsd",
+         liquidity_usd AS "liquidityUsd", source, pool_address AS "poolAddress"
+       FROM token_market_samples
+       WHERE mint=$1 AND observed_at >= $2::timestamptz
+         AND observed_at <= $3::timestamptz
+       ORDER BY observed_at ASC LIMIT 500`,
+      [mint,startAt,endAt]
+    );
+    return rows.rows as CapObservation[];
+  }
+  async pruneMarketCapSamples(retentionDays=7):Promise<number> {
+    if(!Number.isInteger(retentionDays)||retentionDays<2||retentionDays>30)
+      throw new Error("invalid_sample_retention");
+    const result=await this.pool.query(
+      `WITH old AS (
+         SELECT id FROM token_market_samples
+         WHERE observed_at < now()-($1::integer*interval '1 day')
+         ORDER BY observed_at ASC LIMIT 2000
+       ) DELETE FROM token_market_samples s USING old WHERE s.id=old.id`,
+      [retentionDays]
+    );
+    return result.rowCount??0;
   }
   async recentCrossings(limit=50) {
     const result = await this.pool.query(
