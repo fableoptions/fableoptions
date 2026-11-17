@@ -10,20 +10,28 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 const batchIntervalMs=Math.max(30000,Number(process.env.MARKET_REQUEST_INTERVAL_MS??30000));
 if(!Number.isFinite(batchIntervalMs))throw new Error("Invalid market sampling interval");
 let active=true;
+let idleRounds=0;
 process.once("SIGTERM",()=>{active=false;});
 process.once("SIGINT",()=>{active=false;});
 while(active){
   try{
     const tokens=await store.dueTokens(20);
-    if(!tokens.length){await sleep(15000);continue;}
+    if(!tokens.length){
+      idleRounds++;
+      if(idleRounds%20===1)process.stderr.write("[fable] market worker idle: no due indexed launches\\n");
+      await sleep(15000);continue;
+    }
+    idleRounds=0;
     let delay=batchIntervalMs;
     try {
       const samples=await fetchDexObservations(tokens.map(x=>x.mint));
       const byMint=new Map(samples.map(x=>[x.mint,x]));
+      let crossingCount=0;
       for(const token of tokens){
         const sample=byMint.get(token.mint);
         if(!sample){await store.deferToken(token.mint,600);continue;}
         const event=await store.recordPrice({...sample,source:"dexscreener"});
+        if(event)crossingCount++;
         if(event)process.stdout.write(JSON.stringify({
           event,mint:token.mint,symbol:token.symbol,
           marketCapUsd:sample.marketCapUsd,poolLiquidityUsd:sample.poolLiquidityUsd,
@@ -32,6 +40,10 @@ while(active){
           optionsAvailable:false,source:"dexscreener",settlementOracle:false
         })+"\n");
       }
+      process.stderr.write("[fable] market batch "+JSON.stringify({
+        queried:tokens.length,matched:samples.length,unpriced:tokens.length-samples.length,
+        observedCrossings:crossingCount,source:"dexscreener",settlementOracle:false
+      })+"\\n");
     }catch(error){
       const limited=error instanceof MarketRateLimitError;
       delay=limited?error.delayMs:Math.max(batchIntervalMs,60000);
