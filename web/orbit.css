@@ -1,0 +1,45 @@
+/* Adapted Quote Orbit experience for Fable's existing static preview.
+   No React runtime is required by the current /web Railway service. */
+.orbit-section{background:#f3f7f1;overflow:hidden}
+.orbit-intro{text-align:center;max-width:740px;margin:0 auto 22px}
+.orbit-intro h2{margin:16px 0;font-family:Georgia,serif;font-weight:400;letter-spacing:-.045em}
+.orbit-intro p{margin:0 auto;color:#738879}
+.orbit-stage{position:relative;max-width:920px;height:485px;margin:0 auto;isolation:isolate;user-select:none}
+.orbit-frame{position:absolute;inset:8% 8% 0;border:1px solid #dce8dc;pointer-events:none}
+.orbit-sphere{position:absolute;width:min(75%,670px);aspect-ratio:1;left:50%;top:75%;transform:translate(-50%,-50%) rotate(-16deg);border:1px solid #d7e6da;border-radius:50%;opacity:.75;pointer-events:none;z-index:-1;background:repeating-radial-gradient(ellipse at center,transparent 0,transparent 55px,#dbe8dc 56px,transparent 57px)}
+.orbit-sphere:before,.orbit-sphere:after{content:"";position:absolute;inset:7%;border-radius:50%;border:1px solid #dae7db;transform:scaleX(.56)}
+.orbit-sphere:after{transform:scaleX(.2)}
+.orbit-dots{position:absolute;inset:0}
+.orbit-token{position:absolute;transform:translate(-50%,-50%);border:0;background:transparent;min-width:74px;display:grid;justify-items:center;gap:6px;color:#51745d;cursor:pointer;transition:left .65s cubic-bezier(.2,.9,.2,1),top .65s cubic-bezier(.2,.9,.2,1),opacity .25s ease;z-index:3}
+.orbit-token-symbol{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--token-color);color:white;font-size:23px;font-weight:750;box-shadow:0 12px 28px #234b2b28;border:3px solid #f5faf5;transition:transform .2s ease}
+.orbit-token:hover .orbit-token-symbol,.orbit-token:focus-visible .orbit-token-symbol{transform:scale(1.12)}
+.orbit-token.selected .orbit-token-symbol{box-shadow:0 0 0 5px #cfe8d5,0 15px 30px #234b2b2c}
+.orbit-token-name{font-size:11px;background:#fafcf7e8;border:1px solid #e4ede2;padding:3px 7px;border-radius:100px;white-space:nowrap}
+.orbit-token.selected .orbit-token-name{font-weight:700;color:#24513a}
+.orbit-token:focus-visible{outline:2px solid #367650;outline-offset:6px;border-radius:8px}
+.orbit-card{position:absolute;z-index:8;left:50%;top:54%;transform:translate(-50%,-50%);width:min(385px,49%);border:1px solid #dce9dd;border-radius:22px;background:rgba(255,255,255,.94);backdrop-filter:blur(15px);padding:25px 28px;box-shadow:0 25px 70px #2e63401e}
+.orbit-card-switch{animation:orbitCardEnter .55s cubic-bezier(.22,.86,.26,1)}
+@keyframes orbitCardEnter{0%{opacity:.7;transform:translate(-50%,-44%) scale(.96)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.orbit-card-label{font-size:10px;letter-spacing:1.5px;color:#659173}
+.orbit-card h3{font-size:38px;letter-spacing:-1.8px;margin:12px 0;color:#174a32;overflow-wrap:anywhere}
+.orbit-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:15px 0;border-block:1px solid #e6eee5}
+.orbit-card-grid span,.orbit-card-address{font-size:10px;color:#8a9e8d}
+.orbit-card-grid strong{display:block;margin-top:6px;font-size:15px;color:#335c41}
+.orbit-card-address{display:flex;justify-content:space-between;gap:10px;margin-top:15px;align-items:center}
+.orbit-card-address code{font-size:11px;color:#456a52}
+.orbit-card-address a{text-decoration:underline;text-underline-offset:2px;color:#326f4c}
+.orbit-card p{font-size:11px;line-height:1.55;margin:13px 0 0;color:#7b9080}
+.orbit-controls{display:flex;justify-content:center;align-items:center;gap:15px;margin:4px auto 20px}
+.orbit-controls button{background:white;border:1px solid #d8e5d8;border-radius:50%;width:42px;height:42px;cursor:pointer;color:#225a3b;font-size:20px}
+.orbit-controls button:hover{background:#e2f0e5}
+#orbit-counter{font-size:11px;letter-spacing:.1em;color:#849787;min-width:48px;text-align:center}
+.orbit-actions{display:flex;gap:12px;justify-content:center;margin:12px 0 14px}
+.orbit-actions button{border-radius:100px;padding:13px 22px;border:1px solid #2b6d48;background:#265b3e;color:white;font-weight:650;cursor:pointer}
+.orbit-actions button:last-child{background:transparent;color:#265b3e}
+.orbit-actions button:hover{filter:brightness(1.1)}
+.orbit-smallprint{text-align:center;font-size:11px!important;margin:0 auto!important;color:#7e9183!important}
+.demo-selected-token{font-weight:650;color:#386746;padding:0 0 14px;margin:0!important}
+#demo-orbit-warning{color:#947756;margin-top:14px;font-size:11px}
+@media(max-width:720px){.orbit-stage{height:435px}.orbit-frame{inset:7% 2% 0}.orbit-card{width:min(360px,62%);padding:20px}.orbit-card h3{font-size:30px}.orbit-token-symbol{width:44px;height:44px;font-size:18px}.orbit-token-name{font-size:10px}}
+@media(max-width:500px){.orbit-stage{height:480px}.orbit-card{top:53%;width:72%;padding:17px}.orbit-card h3{font-size:25px}.orbit-card-grid strong{font-size:12px}.orbit-card-grid{gap:5px}.orbit-token{min-width:55px}.orbit-token-symbol{width:38px;height:38px;font-size:16px}.orbit-token-name{font-size:9px;padding:2px 4px}.orbit-actions button{padding:12px 15px}}
+@media(prefers-reduced-motion:reduce){.orbit-token{transition:none}.orbit-card-switch{animation:none}}
