@@ -17,7 +17,7 @@ Fable calculates top-token-account and top-ten-token-account percentages from at
 
 AMM vaults, custodians and accounts controlled by programs are **not excluded** because classification hasn't been independently established. High concentration triggers a review flag, not a confirmed bundle allegation.
 
-Snapshots are sampled in the existing price worker no more than once every ~6 price batches, and not more than once per token every 30 minutes. Only recently priced, observed >$300K mints are selected.
+Snapshots are sampled in the existing price worker no more than once every ~6 price batches, and not more than once per token every 30 minutes. Only recently priced, observed >$300K mints are selected. Failed provider requests are persisted in PostgreSQL with a 30-minute-to-six-hour exponential cooldown, including across worker restarts.
 
 ## Launch-slot token acquisition audit
 
@@ -48,3 +48,11 @@ Solana RPC references:
 - https://solana.com/docs/rpc/http/gettokensupply
 - https://solana.com/docs/rpc/http/getmultipleaccounts
 - https://solana.com/docs/rpc/http/getblock
+
+## Evidence from November 17, 2026
+
+- Main TypeScript checks, unit tests and isolated Postgres integration tests passed: https://github.com/fableoptions/fableoptions/actions/runs/44121622575
+- Existing API and price worker both deployed successfully on Railway at commit `845e46c713b671e3366587425acee0728d1e7dd7`.
+- A one-off ownership snapshot via the unauthenticated public Solana RPC was **rate limited (HTTP 429)**. It did **not** establish live holder data accuracy. Source: https://github.com/fableoptions/fableoptions/actions/runs/44121299166
+- The deployed Helius-connected worker is scheduled to query ownership less frequently; no successful live ownership-audit or same-slot sample had been independently observed at the time of this report.
+- No new paid services were provisioned. Existing Railway and Helius usage may still accrue normal metered charges.
