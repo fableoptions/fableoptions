@@ -72,7 +72,7 @@ jobs:
       - name: Execute fake test-USDC option contract on DEVNET
         run: |
           npm install --no-audit --no-fund
-          npm run test:solana:devnet
+          npx tsx devnet/scripts/public-devnet-smoke.ts
       - name: Finalize results and discard temporary deployment identities
         if: always()
         run: |
