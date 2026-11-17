@@ -1,6 +1,6 @@
 # Fable Options — Solana devnet sandbox
 
-**Status (November 17, 2026): Rust and TypeScript tests pass, an SBF executable was compiled, and actual program instructions passed on a disposable LOCAL Solana validator. The program has NOT been deployed to public devnet or mainnet, is NOT audited, and has handled NO real USDC. This is NOT the live Fable options exchange.**
+**Status (November 17, 2026): PUBLIC SOLANA DEVNET SMOKE TEST PASSED.** A disposable Anchor program was deployed to public devnet and exercised with valueless six-decimal SPL test tokens. The verified run is [GitHub Actions 44145610549, attempt 2](https://github.com/fableoptions/fableoptions/actions/runs/44145610549). Program ID: `HawZvCmjB9Pj6Gu8AqzyoewtCw4dANiE2Ud1zjBDQqCB`; fake mint: `6uw4TSszCkebzJqNoj887zbWKULrMqxxYzDEeVGYjWdU`. Test assertions passed for create/buy, mock expiry price, settlement, rejection of unauthorized oracle and cancellation, prevention of double settlement, and unsold cancellation. Result: buyer 180,000,000 and writer 120,000,000 fake six-decimal token units. **Not audited, no real USDC, not production-ready.**
 
 The actual onchain Anchor program is in `programs/fable_devnet_options/src/lib.rs`. A separate deterministic TypeScript state-machine simulator and tests live in `../src/options/devnet-prototype-sim.ts` and `../src/options/devnet-prototype-sim.test.ts`.
 
@@ -87,6 +87,13 @@ As of November 17, 2026, the public-devnet GitHub Actions deployment builds succ
 - Public devnet program keys are disposable and **not saved**. A successful run demonstrates real devnet test-token transactions but does not produce a maintainable production deployment or certified escrow. Future persistent deployment would require separately managed devnet-only secrets and owner-approved access.
 
 This manual step is the only user intervention currently required to attempt the public devnet proof. No coding is needed, no purchase is required, and Fable's production services remain disconnected.
+
+## Verified public-devnet milestone and next test gates
+
+- Run **44145610549 (attempt 2)** completed successfully with log marker `PASSED_PUBLIC_DEVNET`.
+- The program ID above is disposable and should NOT be used as a production or permanent Fable address. Deployment success does not establish a secure, upgradeable production program.
+- Next: add the public-devnet **oracle-timeout refund** and negative-path account substitution tests, full vault-balance invariants and signed transaction receipts; then wire backend quote/risk-admission simulator to the test-only contract without introducing a live deposit path.
+- Do not enable a real-money UI, real USDC deposits, or a mainnet signing path. Independent audit, market integrity/oracle design, settlement controls, and legal review remain mandatory before any production launch.
 
 ## Critical risks before any mainnet release
 
