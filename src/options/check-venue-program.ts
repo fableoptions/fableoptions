@@ -26,3 +26,4 @@ process.stdout.write(JSON.stringify({
     "No wallet transactions, deposits or live option fills can be submitted by this tool."
   ]
 },null,2)+"\n");
+\n// A missing or invalid mainnet program is a FAILED integration gate, not a successful smoke test.\nif(result.status!=="programdata_matched"||!result.programDataVerified)process.exitCode=2;\n
