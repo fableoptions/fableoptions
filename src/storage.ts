@@ -12,7 +12,10 @@ export class FableStore {
     this.pool = new Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 8000 });
   }
   async init(): Promise<void> {
-    await this.pool.query(`
+    const client=await this.pool.connect();
+    try {
+      await client.query("SELECT pg_advisory_lock(428719002)");
+      await client.query(`
       CREATE TABLE IF NOT EXISTS launches (
         mint TEXT PRIMARY KEY,
         signature TEXT NOT NULL,
@@ -44,6 +47,10 @@ export class FableStore {
       ALTER TABLE crossing_events ADD COLUMN IF NOT EXISTS price_source TEXT;
       CREATE INDEX IF NOT EXISTS crossing_events_created_idx ON crossing_events (created_at DESC);
     `);
+    } finally {
+      try { await client.query("SELECT pg_advisory_unlock(428719002)"); }
+      finally { client.release(); }
+    }
   }
   async recordLaunch(launch: LaunchRecord): Promise<boolean> {
     const result = await this.pool.query(
