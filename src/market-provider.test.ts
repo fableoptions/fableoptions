@@ -24,3 +24,12 @@ test("429 is surfaced for the worker to back off",async()=>{
  const fake=async()=>({ok:false,status:429,headers:{get:()=>null}});
  await assert.rejects(fetchDexObservations([mint],fake as unknown as typeof fetch),MarketRateLimitError);
 });
+
+test("DEX unit price is preserved separately from market cap and never inferred from FDV",()=>{
+ const rows=parseDexObservations([{...x,marketCap:500000,fdv:999999,
+   priceUsd:"0.00049"}],[mint]);
+ assert.equal(rows[0].marketCapUsd,500000);
+ assert.equal(rows[0].tokenPriceUsd,0.00049);
+ const missing=parseDexObservations([{...x,priceUsd:null}],[mint]);
+ assert.equal(missing[0].tokenPriceUsd,null);
+});
