@@ -22,6 +22,6 @@ jobs:
         with:
           workspaces: devnet
       - name: Compile experimental Anchor program
-        run: cargo check --manifest-path devnet/Cargo.toml --locked
+        run: cargo check --manifest-path devnet/Cargo.toml
       - name: Check Rust state math unit tests
-        run: cargo test --manifest-path devnet/Cargo.toml --locked
+        run: cargo test --manifest-path devnet/Cargo.toml
