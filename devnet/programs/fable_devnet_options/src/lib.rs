@@ -371,7 +371,7 @@ pub struct BuyOffer<'info> {
     #[account(mut, token::mint = test_usdc_mint, token::authority = position.writer,
         token::token_program = token_program)]
     pub writer_tokens: InterfaceAccount<'info, TokenAccount>,
-    #[account(associated_token::mint = test_usdc_mint, associated_token::authority = position,
+    #[account(mut, associated_token::mint = test_usdc_mint, associated_token::authority = position,
         associated_token::token_program = token_program)]
     pub vault: InterfaceAccount<'info, TokenAccount>,
     pub token_program: Interface<'info, TokenInterface>,
