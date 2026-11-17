@@ -4,11 +4,12 @@
  */
 export interface DexPair {
   chainId?:string; pairAddress?:string; marketCap?:number|null; fdv?:number|null;
+  priceUsd?:string|number|null;
   baseToken?:{address?:string}; liquidity?:{usd?:number|null};
 }
 export type MarketObservation={
   mint:string;marketCapUsd:number;poolLiquidityUsd:number;poolAddress:string;
-  observedAt:Date;source:"dexscreener";
+  observedAt:Date;source:"dexscreener";tokenPriceUsd:number|null;
 };
 export function parseDexObservations(pairs:DexPair[],mints:readonly string[],at=new Date()):MarketObservation[]{
   const desired=new Set(mints);
@@ -20,10 +21,13 @@ export function parseDexObservations(pairs:DexPair[],mints:readonly string[],at=
     if(typeof cap!=="number"||!Number.isFinite(cap)||cap<=0||
        typeof liquidity!=="number"||!Number.isFinite(liquidity)||liquidity<=0||
        !pair.pairAddress)continue;
+    const parsedPrice=pair.priceUsd==null?NaN:Number(pair.priceUsd);
+    const price=Number.isFinite(parsedPrice)&&parsedPrice>0&&parsedPrice<1e9?parsedPrice:null;
     const old=best.get(mint);
     if(!old||liquidity>old.poolLiquidityUsd)best.set(mint,{
       mint,marketCapUsd:cap,poolLiquidityUsd:liquidity,
-      poolAddress:pair.pairAddress,observedAt:at,source:"dexscreener"
+      poolAddress:pair.pairAddress,observedAt:at,source:"dexscreener",
+      tokenPriceUsd:price
     });
   }
   return [...best.values()];
