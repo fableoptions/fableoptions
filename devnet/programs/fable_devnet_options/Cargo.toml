@@ -1,0 +1,22 @@
+[package]
+name = "fable_devnet_options"
+version = "0.1.0"
+edition = "2021"
+description = "UNAUDITED devnet-only capped USDC options lifecycle sandbox"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "fable_devnet_options"
+
+[features]
+default = []
+no-entrypoint = []
+cpi = ["no-entrypoint"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+custom-heap = []
+custom-panic = []
+anchor-debug = []
+
+[dependencies]
+anchor-lang = "1.2.2"
+anchor-spl = { version = "1.2.2", features = ["associated_token", "token_interface"] }
