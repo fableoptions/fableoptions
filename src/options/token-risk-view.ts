@@ -25,6 +25,10 @@ export interface TrackedRiskRow {
   distinct_reported_owners?:number|null;
   slot_repeated_owner_accounts?:number|null;
   slot_possible_coordination?:string|null;
+  funding_status?:string|null;
+  funding_scanned_wallets?:number|null;
+  common_funding_source_count?:number|null;
+  funding_source_recipient_counts?:number[]|null;
 }
 function timestamp(value:string|Date|null|undefined):string|null {
   if(value instanceof Date)return Number.isFinite(value.getTime())?value.toISOString():null;
@@ -41,7 +45,8 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
     topHolderConcentrationPct:null,
     topTenConcentrationPct:null,
     holderAccountsClassified:false,
-    launchBundleEvidence:row.slot_possible_coordination==="needs_review"?"suspected":"unknown",
+    launchBundleEvidence:row.slot_possible_coordination==="needs_review"||
+      row.funding_status==="partial_with_link_signal"?"suspected":"unknown",
     suspiciousVolumeEvidence:"unknown",
     mintAuthorityRevoked:row.mint_authority_revoked??null,
     freezeAuthorityRevoked:row.freeze_authority_revoked??null,
@@ -54,6 +59,14 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
   return {
     ...assessment,
     reasons:[...new Set([...assessment.reasons,...(visibleConcentration?["UNCLASSIFIED_OWNERSHIP_CONCENTRATION_REVIEW"]:[])])],
+    fundingEvidence:{
+      status:row.funding_status??"not_checked",
+      walletsSampled:row.funding_scanned_wallets??null,
+      observedCommonSourceCount:row.common_funding_source_count??null,
+      recipientCounts:Array.isArray(row.funding_source_recipient_counts)?row.funding_source_recipient_counts:[],
+      commonControlProven:false,
+      completeFundingHistory:false
+    },
     launchSlotEvidence:{
       analysisStatus:row.slot_analysis_status??"not_checked",
       positiveDeltaTransactions:row.positive_delta_transactions??null,
@@ -75,7 +88,8 @@ export function assessTrackedToken(row:TrackedRiskRow,now=new Date()) {
     dataLimitations:[
       "Token first_seen is the ingestion timestamp, not verified onchain creation time.",
       "Observed largest token-account balances are not necessarily beneficial owners; pool vaults and custodians are unclassified.",
-      "Creator-linked wallets, same-slot buys and volume integrity have not been independently established.",
+      "Sparse common-funding observations cannot establish beneficial ownership or identify custodial exchange senders.",
+      "Creator-linked wallets, all same-slot buys and volume integrity have not been independently established.",
       "This data is never a trading authorization."
     ]
   };
