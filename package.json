@@ -16,7 +16,8 @@
     "rfq:api": "tsx src/options/rfq-api.ts",
     "test:rfq-integration": "node --import tsx src/options/rfq-http.integration.ts",
     "verify:pump:mainnet": "tsx src/pump-mainnet-validation.ts",
-    "verify:venue:program": "tsx src/options/check-venue-program.ts"
+    "verify:venue:program": "tsx src/options/check-venue-program.ts",
+    "verify:usdc:account": "tsx src/options/inspect-usdc-account.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
