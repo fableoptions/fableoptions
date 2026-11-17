@@ -159,6 +159,10 @@ export class FableStore {
         count(*) FILTER (WHERE last_price_at > now() - interval '3 minutes')::int AS fresh_priced,
         count(*) FILTER (WHERE last_price_at IS NULL)::int AS never_priced,
         count(*) FILTER (WHERE last_price_at <= now() - interval '3 minutes')::int AS stale_priced,
+        count(*) FILTER (WHERE last_price_at > now() - interval '3 minutes'
+          AND latest_market_cap_usd >= 300000)::int AS fresh_above_300k,
+        count(*) FILTER (WHERE latest_price_source = 'pump_bonding_curve_solana')::int AS curve_priced,
+        count(*) FILTER (WHERE latest_price_source = 'dexscreener')::int AS dex_priced,
         max(last_price_at) AS latest_sample_at FROM launches`),
       this.pool.query(`SELECT count(*)::int AS total,
         count(*) FILTER (WHERE observed_at > now() - interval '1 day')::int AS last_day,
