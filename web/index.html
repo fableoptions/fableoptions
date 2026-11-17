@@ -4,10 +4,23 @@
 <link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./orbit.css"></head>
 <body>
 <header class="top"><a class="brand" href="#" aria-label="Fable home"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 52 52"><path d="M11 9 C25 2 36 6 43 7 C32 9 27 17 22 26 C19 31 14 33 10 32 C17 22 18 16 11 9Z" fill="#a5d7be"/><path d="M10 32 C21 34 28 29 35 21 C36 32 25 46 9 44 C15 41 13 36 10 32Z" fill="#478c68"/></svg></span>Fable</a>
-<nav aria-label="Primary"><a href="#discover">Discover</a><a href="#compare">Why options</a><a href="#fable-orbit">Meme orbit</a><a href="#playground">Fake-USDC sandbox</a><a href="#ticket">The ticket</a></nav>
+<nav aria-label="Primary"><a href="#fable-orbit">Explore</a><a href="#discover">Discover</a><a href="#compare">Why options</a><a href="#playground">Fake-USDC sandbox</a><a href="#ticket">The ticket</a></nav>
 <div class="top-right"><span class="status-dot"></span>Preview only <button class="quiet" disabled>Connect wallet soon</button></div></header>
 <main>
-<section class="hero"><div class="eyebrow"><span class="dot"></span> A new way to trade the trenches</div><h1>Trade the move.<br><em>Define the risk.</em></h1><p>Follow emerging tokens. Explore the mechanics of calls and puts. Know the premium at risk before you take a position.</p><div class="hero-actions"><a class="primary" href="#compare">Explore the difference <span aria-hidden="true">↗</span></a><a class="underlined" href="#discover">Browse discovery ↗</a></div><div class="ambient a1" aria-hidden="true"></div><div class="ambient a2" aria-hidden="true"></div></section>
+<section class="section orbit-section" id="fable-orbit" aria-labelledby="orbit-heading">
+<div class="orbit-intro"><span class="kicker">FABLE / THE MAIN EXPERIENCE</span><h2 id="orbit-heading">Trade the move.<br><em>Define the risk.</em></h2>
+<p>Pick a Pump.fun memecoin, explore its story, and preview a call or put using fake USDC. No live orders or deposits.</p></div>
+<div class="orbit-stage" aria-label="Interactive Pump.fun memecoin selector">
+<div class="orbit-frame" aria-hidden="true"></div><div class="orbit-sphere" aria-hidden="true"></div><div class="orbit-dots" role="group" aria-label="Choose a memecoin"></div>
+<article class="orbit-card" aria-live="polite"><span class="orbit-card-label">PUMP.FUN · HISTORICAL SNAPSHOT</span>
+<h3 id="orbit-coin-name">PAID</h3>
+<div class="orbit-card-grid"><div><span>OBSERVED MARKET CAP</span><strong id="orbit-coin-cap">$1.42M observed</strong></div><div><span>OBSERVED TOKEN PRICE</span><strong id="orbit-coin-price">$0.001425</strong></div></div>
+<div class="orbit-card-address"><code id="orbit-coin-address">98kfF7r…Lzypump</code><a id="orbit-coin-link" href="https://pump.fun/coin/98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump" target="_blank" rel="noopener noreferrer">Pump.fun ↗</a></div>
+<p>Market-cap snapshots do not prove liquidity or token integrity. No actual options market, quote, or collateral is represented.</p></article></div>
+<div class="orbit-controls"><button type="button" id="orbit-prev" aria-label="Previous coin">‹</button><span id="orbit-counter">1 / 5</span><button type="button" id="orbit-next" aria-label="Next coin">›</button></div>
+<div class="orbit-actions"><button id="orbit-call" type="button">Preview a CALL ↗</button><button id="orbit-put" type="button">Preview a PUT ↗</button></div>
+<p class="orbit-smallprint">Curated Pump.fun observations · November 17, 2026 · NOT LIVE · NOT TRADEABLE · risk screening incomplete</p>
+</section>
 <section class="section discover" id="discover"><div class="section-title"><div><span class="kicker">01 / DISCOVER</span><h2>Catch the next chapter.</h2><p>A continuously updated $300K crossing feed is in development. Tokens shown below are deliberately fictional examples.</p></div><span class="pill">DEMO DATA · NOT LIVE</span></div>
 <div class="table-wrap"><table><thead><tr><th>Token</th><th>Market cap</th><th>Liquidity</th><th>Age</th><th>Options</th></tr></thead><tbody>
 <tr><td><span class="token-icon">A</span><strong>ALBA</strong><span class="muted">Example</span></td><td>$328K</td><td>$54K</td><td>32m</td><td><span class="unavailable">Unavailable</span></td></tr>
@@ -21,22 +34,8 @@
 <div class="results"><div class="result"><div class="result-label">Purchased call option <span>Defined loss</span></div><div class="result-value" id="call-result">+$50.00</div><div class="result-hint">Payoff at expiry minus $100 premium</div><div class="track"><div class="bar call-bar" id="call-bar"></div></div><div class="result-foot"><span>Maximum loss</span><strong>$100</strong></div></div>
 <div class="result"><div class="result-label">Leveraged long perp <span>Margin risk</span></div><div class="result-value" id="perp-result">+$150.00</div><div class="result-hint">Theoretical P&amp;L before margin liquidation</div><div class="track"><div class="bar perp-bar" id="perp-bar"></div></div><div class="result-foot"><span id="liquidation-note">Approximate margin exhaustion at −20% move</span></div></div>
 <p class="callout">Purchased options are not margin-liquidated, but can lose <strong>100% of the premium</strong> when they expire worthless. A leveraged perp may be liquidated before the final price shown here.</p></div></div></section>
-<section class="section orbit-section" id="fable-orbit" aria-labelledby="orbit-heading">
-<div class="orbit-intro"><span class="kicker">03 / EXPLORE PUMP MEMECOINS</span><h2 id="orbit-heading">Pick your next hypothetical trade.</h2>
-<p>Select a coin orbiting the globe. Choose a call or put to load a fake-USDC payoff example below. Each coin was observed above $1M market cap in a Pump.fun snapshot; figures may have changed.</p></div>
-<div class="orbit-stage" aria-label="Interactive Pump.fun memecoin selector">
-<div class="orbit-frame" aria-hidden="true"></div><div class="orbit-sphere" aria-hidden="true"></div><div class="orbit-dots" role="group" aria-label="Choose a memecoin"></div>
-<article class="orbit-card" aria-live="polite"><span class="orbit-card-label">PUMP.FUN · HISTORICAL SNAPSHOT</span>
-<h3 id="orbit-coin-name">PAID</h3>
-<div class="orbit-card-grid"><div><span>OBSERVED MARKET CAP</span><strong id="orbit-coin-cap">$1.42M observed</strong></div><div><span>OBSERVED TOKEN PRICE</span><strong id="orbit-coin-price">$0.001425</strong></div></div>
-<div class="orbit-card-address"><code id="orbit-coin-address">98kfF7r…Lzypump</code><a id="orbit-coin-link" href="https://pump.fun/coin/98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump" target="_blank" rel="noopener noreferrer">Pump.fun ↗</a></div>
-<p>Market-cap snapshots do not prove liquidity or token integrity. No actual options market, quote, or collateral is represented.</p></article></div>
-<div class="orbit-controls"><button type="button" id="orbit-prev" aria-label="Previous coin">‹</button><span id="orbit-counter">1 / 5</span><button type="button" id="orbit-next" aria-label="Next coin">›</button></div>
-<div class="orbit-actions"><button id="orbit-call" type="button">Preview a CALL ↗</button><button id="orbit-put" type="button">Preview a PUT ↗</button></div>
-<p class="orbit-smallprint">Curated Pump.fun observations · November 17, 2026 · NOT LIVE · NOT TRADEABLE · risk screening incomplete</p>
-</section>
 <section class="section playground" id="playground" aria-labelledby="playground-heading">
-  <div class="section-title"><div><span class="kicker">04 / FAKE-USDC SANDBOX</span>
+  <div class="section-title"><div><span class="kicker">03 / FAKE-USDC SANDBOX</span>
     <h2 id="playground-heading">Build a hypothetical option.</h2>
     <p>Select a Pump.fun coin above or adjust a hypothetical option and inspect its capped cash-settled payout. These are not live quotes or blockchain transactions.</p></div>
     <span class="pill">SIMULATION ONLY</span></div>
@@ -56,7 +55,7 @@
     <p class="demo-disclaimer">Based on hypothetical capped intrinsic value only. This browser calculator does not access scanner data, validate bundles, collect signatures, submit RFQs, connect wallets, or execute Solana instructions. Actual pricing and risk screening must be independently verified.</p>
   </div></div>
 </section>
-<section class="section ticket-section" id="ticket"><span class="kicker">05 / THE EXPERIENCE</span><h2>A little moment for every trade.</h2><p>A signature receipt animation, shown as an interactive mockup. No transaction is sent.</p><button class="primary" id="preview-ticket">Preview ticket animation <span aria-hidden="true">↗</span></button></section>
+<section class="section ticket-section" id="ticket"><span class="kicker">04 / THE EXPERIENCE</span><h2>A little moment for every trade.</h2><p>A signature receipt animation, shown as an interactive mockup. No transaction is sent.</p><button class="primary" id="preview-ticket">Preview ticket animation <span aria-hidden="true">↗</span></button></section>
 <footer><a class="brand" href="#">Fable</a><span>Trade the move. Define the risk.</span><span>Prototype only · No deposits or live options</span></footer>
 </main>
 <div class="overlay" id="overlay" hidden><div class="veil" id="veil"></div><div class="ticket" id="ticket-card" role="dialog" aria-modal="true" aria-labelledby="ticket-heading"><div class="ticket-top"><span class="brand smaller">Fable</span><button id="close-ticket" class="close" aria-label="Close ticket">×</button></div><span class="kicker">DEMO CONTRACT · NOT EXECUTED</span><h3 id="ticket-heading">A new chapter.</h3><div class="ticket-line"></div><div class="ticket-item"><span>Illustrative call</span><strong>ALBA / USDC</strong></div><div class="ticket-item"><span>Strike</span><strong>$1.00</strong></div><div class="ticket-item"><span>Premium at risk</span><strong>$100.00</strong></div><div class="ticket-item"><span>Expiration</span><strong>15 minutes</strong></div><div class="ticket-divider"></div><div class="ticket-bottom">PREVIEW ONLY <span>✳</span> NO REAL TRADE</div></div></div>
