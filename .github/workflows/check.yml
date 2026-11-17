@@ -31,5 +31,6 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
+      - run: node --check web/app.js
       - run: npm test
       - run: npm run test:rfq-integration
