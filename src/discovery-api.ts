@@ -7,6 +7,7 @@ import { theoreticalCappedOption, validateModelInput, type ModelInput } from "./
 import { RfqStore } from "./options/rfq-store.js";
 import { venueReadiness } from "./options/venue-readiness.js";
 import { venueCandidateReport } from "./options/venue-candidates.js";
+import { assessTrackedToken } from "./options/token-risk-view.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
 await store.init();
 const rfqStore = new RfqStore(process.env.DATABASE_URL ?? "");
@@ -95,15 +96,31 @@ const server = createServer(async (request, response) => {
       response.writeHead(200);
       response.end(JSON.stringify(data)); return;
     }
+    if (path === "/v1/options/token-risk") {
+      const mint=url.searchParams.get("mint")??"";
+      if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+        response.writeHead(400);response.end(JSON.stringify({error:"invalid_mint"}));return;
+      }
+      const token=await store.tokenRiskRow(mint);
+      if(!token){response.writeHead(404);response.end(JSON.stringify({error:"mint_not_indexed"}));return;}
+      const risk=assessTrackedToken(token);
+      response.writeHead(200);response.end(JSON.stringify({mint,tokenSymbol:token.symbol,risk}));
+      return;
+    }
     if (path === "/v1/discovery") {
       const data = await store.recentCrossings();
       response.writeHead(200);
-      response.end(JSON.stringify({data,thresholdUsd:300000,source:"sampled",tradingEnabled:false})); return;
+      response.end(JSON.stringify({
+        data:data.map(row=>({...row,risk:assessTrackedToken(row)})),
+        thresholdUsd:300000,source:"sampled",
+        riskGateEnabled:true,marketCapAloneMakesTradable:false,
+        tradingEnabled:false
+      })); return;
     }
     if (path === "/v1/launches") {
       const data = await store.recentLaunches();
       response.writeHead(200);
-      response.end(JSON.stringify({data:data.map(row => decorateMarketRow(row)),tradingEnabled:false,marketDataCompletenessGuaranteed:false})); return;
+      response.end(JSON.stringify({data:data.map(row => ({...decorateMarketRow(row),risk:assessTrackedToken(row)})),tradingEnabled:false,marketDataCompletenessGuaranteed:false})); return;
     }
     response.writeHead(404); response.end(JSON.stringify({error:"not_found"}));
   } catch (error) {
