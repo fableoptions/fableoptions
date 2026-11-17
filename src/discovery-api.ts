@@ -3,8 +3,11 @@ import { createServer } from "node:http";
 import { FableStore } from "./storage.js";
 import { analyzeOption, validatePayoffInput, type PayoffInput } from "./options/analytics.js";
 import { theoreticalCappedOption, validateModelInput, type ModelInput } from "./options/pricing.js";
+import { RfqStore } from "./options/rfq-store.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
 await store.init();
+const rfqStore = new RfqStore(process.env.DATABASE_URL ?? "");
+await rfqStore.init();
 const port = Number(process.env.PORT ?? 3000);
 const host = "0.0.0.0";
 const server = createServer(async (request, response) => {
@@ -58,6 +61,22 @@ const server = createServer(async (request, response) => {
       }
       response.writeHead(200);response.end(JSON.stringify(theoreticalCappedOption(input)));return;
     }
+    if (path === "/v1/rfq/requests") {
+      const data = await rfqStore.listRequests();
+      response.writeHead(200);
+      response.end(JSON.stringify({data,rfqSubmissionEnabled:false,quotesExecutable:false,collateralVerified:false}));
+      return;
+    }
+    if (path === "/v1/rfq/quotes") {
+      const id=url.searchParams.get("rfqId") ?? "";
+      if(!id || id.length>80) {
+        response.writeHead(400);response.end(JSON.stringify({error:"invalid_rfq_id"}));return;
+      }
+      const data=await rfqStore.listQuotes(id);
+      response.writeHead(200);
+      response.end(JSON.stringify({data,rfqSubmissionEnabled:false,quotesExecutable:false,collateralVerified:false}));
+      return;
+    }
     if (path === "/v1/discovery") {
       const data = await store.recentCrossings();
       response.writeHead(200);
@@ -75,4 +94,4 @@ const server = createServer(async (request, response) => {
   }
 });
 server.listen(port, host, () => process.stderr.write(`[fable] read-only discovery API listening on ${port}\n`));
-process.once("SIGTERM", () => { server.close(); void store.close(); });
+process.once("SIGTERM", () => { server.close(); void store.close(); void rfqStore.close(); });
