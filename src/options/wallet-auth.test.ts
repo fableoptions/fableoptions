@@ -1,0 +1,20 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { generateKeyPairSync, sign } from "node:crypto";
+import bs58 from "bs58";
+import { isSolanaPublicKey, signingMessage, verifySignedPayload } from "./wallet-auth.js";
+test("verifies wallet possession and rejects modified messages",()=>{
+  const {publicKey,privateKey}=generateKeyPairSync("ed25519");
+  const der=publicKey.export({format:"der",type:"spki"}) as Buffer;
+  const wallet=bs58.encode(der.subarray(-32));
+  const nonce="a".repeat(48);
+  const input={id:"req1",side:"call",size:10};
+  const msg=signingMessage(wallet,nonce,"request",input);
+  const sig=bs58.encode(sign(null,Buffer.from(msg),privateKey));
+  assert.ok(isSolanaPublicKey(wallet));
+  assert.equal(verifySignedPayload(wallet,nonce,"request",input,sig),true);
+  assert.equal(verifySignedPayload(wallet,nonce,"quote",input,sig),false);
+  assert.equal(verifySignedPayload(wallet,nonce,"request",{...input,size:11},sig),false);
+  assert.equal(verifySignedPayload(wallet,"b".repeat(48),"request",input,sig),false);
+});
+test("rejects non-wallet addresses",()=>assert.equal(isSolanaPublicKey("not a wallet"),false));
