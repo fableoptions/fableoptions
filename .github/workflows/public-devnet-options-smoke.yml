@@ -56,6 +56,16 @@ jobs:
           solana balance --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR"
           export PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
           if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
+            echo "Standard devnet airdrop unavailable; attempting a LIMITED proof-of-work faucet reward."
+            echo "This mines at most a small amount of valueless devnet SOL, never mainnet SOL."
+            if timeout 360s cargo install devnet-pow --locked; then
+              timeout 420s devnet-pow -u "$RPC" -k "$FABLE_TEST_PAYER_KEYPAIR" mine --target-lamports 2700000000 || true
+            else
+              echo "Proof-of-work faucet CLI installation unavailable."
+            fi
+            export PAYER_LAMPORTS="$(solana balance --lamports --url "$RPC" --keypair "$FABLE_TEST_PAYER_KEYPAIR" | tr -dc '0-9')"
+          fi
+          if [ -z "$PAYER_LAMPORTS" ] || [ "$PAYER_LAMPORTS" -lt 2500000000 ]; then
             echo "::error::PUBLIC_DEVNET_FUNDING_UNAVAILABLE: require at least 2.5 free devnet SOL for program rent and fake token test."
             exit 2
           fi
