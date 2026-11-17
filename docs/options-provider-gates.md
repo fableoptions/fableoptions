@@ -13,7 +13,7 @@ Never infer audit status from a project's own "audited" claims. Verify original 
 
 ## Integration contracts
 
-- `UnderlylingEligibility` is separate from `OptionQuote`; token discovery must never display fictitious executable quotes.
+- `UnderlyingEligibility` is separate from `OptionQuote`; token discovery must never display fictitious executable quotes.
 - Trade requests are denied unless quote is firm, funded, current, correctly tied to an eligible underlying and verified provider.
 - Verify asset mint, decimals, slippage, signature authority, expiry, collateral, oracle, settlement and cancellation before enabling execution.
 - A real provider adapter must explicitly bind to the verified onchain program IDs, not arbitrary contract addresses supplied by a client.
