@@ -35,6 +35,10 @@ The persistent monitor is a separate experimental entry point from `npm run scan
 
 `npm run pump:stream` listens for transactions mentioning a configured Solana program. You must supply `SOLANA_WS_URL` and an independently verified `PUMP_PROGRAM_ID`. This is **not yet a decoded Pump.fun launch indexer**. See [docs/pump-indexer.md](docs/pump-indexer.md).
 
+## Options execution architecture (not live)
+
+The `src/options/` module introduces a **fail-closed** trade-eligibility boundary. It separates a token's appearance in the $300K discovery feed from the existence of an independently verified, executable options contract. All trading remains **disabled** until a venue is independently verified, legally eligible clients are screened, and firm quotes are actually available. Read [options provider go/no-go gates](docs/options-provider-gates.md).
+
 ## Next gates
 
 1. Verify the options venue's mainnet deployment, independent audits, SDK, token eligibility and funded counterparties.
