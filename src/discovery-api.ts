@@ -1,12 +1,14 @@
 /** Read-only API. No deposits, execution endpoints or wallet custody. */
 import { createServer } from "node:http";
 import { FableStore } from "./storage.js";
+import { analyzeOption, validatePayoffInput, type PayoffInput } from "./options/analytics.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
 await store.init();
 const port = Number(process.env.PORT ?? 3000);
 const host = "0.0.0.0";
 const server = createServer(async (request, response) => {
-  const path = new URL(request.url ?? "/", "http://localhost").pathname;
+  const url = new URL(request.url ?? "/", "http://localhost");
+  const path = url.pathname;
   response.setHeader("Content-Type", "application/json; charset=utf-8");
   response.setHeader("Cache-Control", "no-store");
   try {
@@ -16,6 +18,25 @@ const server = createServer(async (request, response) => {
     if (path === "/health") {
       await store.ping();
       response.writeHead(200); response.end(JSON.stringify({status:"ok",tradingEnabled:false})); return;
+    }
+    if (path === "/v1/options/analyze") {
+      const q = url.searchParams;
+      const input: PayoffInput = {
+        side: q.get("side") as PayoffInput["side"],
+        spotPriceUsd: Number(q.get("spotPriceUsd")),
+        strikePriceUsd: Number(q.get("strikePriceUsd")),
+        premiumUsd: Number(q.get("premiumUsd")),
+        units: Number(q.get("units")),
+        payoutCapUsd: Number(q.get("payoutCapUsd"))
+      };
+      const required = ["side","spotPriceUsd","strikePriceUsd","premiumUsd","units","payoutCapUsd"];
+      const errors = required.filter(k => !q.has(k) || q.get(k) === "").map(k => "missing_" + k).concat(validatePayoffInput(input));
+      if (errors.length) {
+        response.writeHead(400); response.end(JSON.stringify({error:"invalid_input",details:errors})); return;
+      }
+      response.writeHead(200);
+      response.end(JSON.stringify(analyzeOption(input)));
+      return;
     }
     if (path === "/v1/discovery") {
       const data = await store.recentCrossings();
