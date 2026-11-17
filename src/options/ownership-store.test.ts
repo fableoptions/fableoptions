@@ -63,3 +63,18 @@ test("candidate selection uses above-threshold sampled prices", {timeout:25000},
   assert.ok(candidate);
  }finally{await store.close();}
 });
+
+test("failed free-tier RPC audit is cooled down rather than retried every batch", {timeout:25000},async t=>{
+ if(!process.env.DATABASE_URL){t.skip("requires isolated test PostgreSQL");return;}
+ const store=new FableStore(process.env.DATABASE_URL);await store.init();
+ const mint="ownership-cooldown-"+randomUUID(),now=new Date();
+ try{
+  await store.recordLaunch({mint,signature:"cooldown-"+randomUUID(),slot:67,
+   name:"Cooldown",symbol:"CD",uri:"https://example.invalid",instruction:"create_v2"});
+  await store.recordPrice({mint,marketCapUsd:390000,poolLiquidityUsd:40000,
+   poolAddress:"pool",observedAt:now,source:"dexscreener"});
+  await store.recordOwnershipFailure(mint,"RPC 429");
+  const due=await store.dueOwnershipAudit();
+  assert.notEqual(due?.mint,mint,"cooldown token should not be scheduled immediately");
+ }finally{await store.close();}
+});
