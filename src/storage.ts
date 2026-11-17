@@ -119,6 +119,55 @@ export class FableStore {
     );
     return result.rows;
   }
+
+  /** Operational sampling health; failures and missing observations are visible, not hidden. */
+  async scannerHealth() {
+    const [launches, jobs, markets, crossings] = await Promise.all([
+      this.pool.query(`SELECT count(*)::int AS total,
+        count(*) FILTER (WHERE first_seen > now() - interval '1 hour')::int AS last_hour,
+        max(first_seen) AS latest_at FROM launches`),
+      this.pool.query(`SELECT state,count(*)::int AS count FROM pump_ingest_jobs GROUP BY state`),
+      this.pool.query(`SELECT
+        count(*) FILTER (WHERE last_price_at IS NOT NULL)::int AS ever_priced,
+        count(*) FILTER (WHERE last_price_at > now() - interval '3 minutes')::int AS fresh_priced,
+        count(*) FILTER (WHERE last_price_at IS NULL)::int AS never_priced,
+        count(*) FILTER (WHERE last_price_at <= now() - interval '3 minutes')::int AS stale_priced,
+        max(last_price_at) AS latest_sample_at FROM launches`),
+      this.pool.query(`SELECT count(*)::int AS total,
+        count(*) FILTER (WHERE observed_at > now() - interval '1 day')::int AS last_day,
+        max(observed_at) AS latest_at FROM crossing_events`)
+    ]);
+    return {
+      asOf: new Date().toISOString(),
+      indexing: {
+        decodedLaunchesTotal: launches.rows[0].total,
+        decodedLaunchesLastHour: launches.rows[0].last_hour,
+        latestDecodedLaunchAt: launches.rows[0].latest_at,
+        signatureJobsByState: Object.fromEntries(jobs.rows.map(x => [x.state, x.count])),
+        coverageComplete: false,
+        latestVerifiedOnchainComparison: null
+      },
+      marketSampling: {
+        ...markets.rows[0],
+        marketDataProvider: "geckoterminal",
+        freshnessWindowSeconds: 180,
+        priceFeedIsSettlementOracle: false
+      },
+      crossings: {
+        total: crossings.rows[0].total,
+        lastDay: crossings.rows[0].last_day,
+        latestObservedAt: crossings.rows[0].latest_at,
+        thresholdUsd: 300000,
+        completenessGuaranteed: false
+      },
+      healthLimits: [
+        "Stats reflect this database only, not complete Pump.fun coverage.",
+        "A scanner process may have disconnected without changing these counters.",
+        "GeckoTerminal prices are sampled and may be missing or stale.",
+        "Live decode accuracy and source reconciliation must be independently verified."
+      ]
+    };
+  }
   async ping() { await this.pool.query("SELECT 1"); }
   async close() { await this.pool.end(); }
 }
