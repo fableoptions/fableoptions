@@ -7,6 +7,7 @@
 import { FableStore } from "./storage.js";
 import { fetchDexObservations, MarketRateLimitError } from "./market-provider.js";
 import { fetchPumpCurveSnapshots, fetchSolUsd } from "./pump-curve-provider.js";
+import { fetchOwnershipAudit } from "./options/ownership-audit.js";
 const store=new FableStore(process.env.DATABASE_URL??"");
 await store.init();
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
@@ -14,7 +15,7 @@ const batchIntervalMs=Math.max(30000,Number(process.env.MARKET_REQUEST_INTERVAL_
 if(!Number.isFinite(batchIntervalMs))throw new Error("Invalid market sampling interval");
 const key=process.env.HELIUS_API_KEY;
 const rpcUrl=process.env.SOLANA_RPC_URL??(key?`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}`:"");
-let active=true, idleRounds=0, solUsdCache:{price:number;at:number}|null=null;
+let active=true, idleRounds=0, batchNumber=0, solUsdCache:{price:number;at:number}|null=null;
 process.once("SIGTERM",()=>{active=false;});
 process.once("SIGINT",()=>{active=false;});
 async function getSolUsd(){
@@ -69,6 +70,29 @@ while(active){
           crossingType:event==="crossed_up"?"observed_between_samples":"first_seen_above",
           optionsAvailable:false,source:sample.source,settlementOracle:false
         })+"\n");
+      }
+      // At most one extra three-call RPC audit every six batches (~3 min).
+      // No higher-rate provider, no scans of arbitrary wallets or funding graphs.
+      batchNumber++;
+      if(batchNumber%6===0 && rpcUrl.startsWith("https://")){
+        try{
+          const candidate=await store.dueOwnershipAudit();
+          if(candidate){
+            const audit=await fetchOwnershipAudit(rpcUrl,candidate.mint);
+            await store.recordOwnershipAudit(audit);
+            process.stderr.write("[fable] ownership snapshot "+JSON.stringify({
+              mint:candidate.mint,slot:audit.contextSlot,
+              topTokenAccountPct:audit.topTokenAccountPct,
+              topTenTokenAccountsPct:audit.topTenTokenAccountsPct,
+              riskSignals:audit.riskSignals,
+              beneficialOwnersVerified:false,bundleProven:false
+            })+"\\n");
+          }
+        }catch(error){
+          // A failed RPC check cannot mark ownership safe or unlocked.
+          process.stderr.write("[fable] ownership audit unavailable: "+
+            (error instanceof Error?error.message:"unknown")+"\\n");
+        }
       }
       process.stderr.write("[fable] market batch "+JSON.stringify({
         queried:tokens.length,dexMatched:dex.length,curveMatched,
