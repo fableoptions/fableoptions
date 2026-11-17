@@ -79,3 +79,22 @@ test("different price provider does not claim continuous threshold crossing", {t
   assert.equal(event,"first_seen_above");
  }finally{await store.close();}
 });
+
+test("rapid same-source 4x pump is marked as market anomaly, not a clean crossing", {timeout:20000},async t=>{
+ if(!process.env.DATABASE_URL){t.skip("requires test PostgreSQL");return;}
+ const store=new FableStore(process.env.DATABASE_URL);await store.init();
+ const mint="anomaly-"+randomUUID(),now=new Date();
+ try{
+  await store.recordLaunch({mint,signature:"anomaly-"+randomUUID(),slot:47,
+   name:"Anomaly test",symbol:"AT",uri:"https://example.invalid",instruction:"create_v2"});
+  await store.recordPrice({mint,marketCapUsd:100000,poolLiquidityUsd:60000,
+   poolAddress:"pool",observedAt:new Date(now.getTime()-50000),source:"dexscreener"});
+  const result=await store.recordPrice({mint,marketCapUsd:400000,poolLiquidityUsd:60000,
+   poolAddress:"pool",observedAt:now,source:"dexscreener"});
+  assert.equal(result,"first_seen_above");
+  const token=(await store.recentLaunches(100)).find((x:{mint:string})=>x.mint===mint);
+  assert.equal(token.latest_anomaly_kind,"rapid_jump");
+  assert.equal(Number(token.latest_anomaly_ratio),4);
+  assert.ok(token.latest_anomaly_at);
+ }finally{await store.close();}
+});
