@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/venue-mainnet-attestation.yml'
+      - 'src/options/program-attestation.ts'
+      - 'src/options/check-venue-program.ts'
   workflow_dispatch:
 jobs:
   inspect:
