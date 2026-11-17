@@ -149,6 +149,15 @@ while(active){
           }
         }
       }
+      // Keep free-tier Postgres bounded. Prune old samples in small batches.
+      if(batchNumber%200===0){
+        try{
+          const removed=await store.pruneMarketCapSamples(7);
+          process.stderr.write("[fable] historical samples pruned: "+removed+"\\n");
+        }catch(error){
+          process.stderr.write("[fable] historical sample prune deferred: "+String(error)+"\\n");
+        }
+      }
       process.stderr.write("[fable] market batch "+JSON.stringify({
         queried:tokens.length,dexMatched:dex.length,curveMatched,
         priced:byMint.size,unpriced:tokens.length-byMint.size,
