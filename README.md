@@ -45,6 +45,14 @@ The persistent monitor is a separate experimental entry point from `npm run scan
 
 The `src/options/` module introduces a **fail-closed** trade-eligibility boundary. It separates a token's appearance in the $300K discovery feed from the existence of an independently verified, executable options contract. All trading remains **disabled** until a venue is independently verified, legally eligible clients are screened, and firm quotes are actually available. Read [options provider go/no-go gates](docs/options-provider-gates.md).
 
+## Onchain test-token options prototype (verified locally)
+
+The unaudited Anchor program in [devnet/](devnet/) now **compiles to a Solana SBF executable** and has passed a transaction-level lifecycle test against a disposable **local validator** (not public devnet, not mainnet). The test used fake six-decimal SPL tokens and exercised writer collateral escrow, buyer premium funding, mock expiry price, buyer payout, writer refund and rejection of duplicate settlement.
+
+[Passing onchain validator test](https://github.com/fableoptions/fableoptions/actions/runs/44140237157). See [devnet/README.md](devnet/README.md) for tested scope and limitations.
+
+**No real-money options exchange exists yet.** The contract is not publicly deployed or audited; the expiry price is a centrally controlled mock, unsuitable for mainnet USDC settlement. The current production services still refuse deposits and trades.
+
 ## Next gates
 
 1. Verify the options venue's mainnet deployment, independent audits, SDK, token eligibility and funded counterparties.
