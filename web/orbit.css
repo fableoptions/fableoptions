@@ -204,3 +204,37 @@ main > .orbit-section:first-child .orbit-actions button{font-size:13px;padding:1
   .orbit-card-address{flex-wrap:wrap}
 }
 @media(prefers-reduced-motion:reduce){.orbit-token,.orbit-coin-art{transition:none!important}}
+
+/* Pipo gradient from the supplied 21st.dev recipe, adapted to static HTML.
+   It sits behind the wireframe globe, not over token images or controls. */
+.orbit-stage .pipo-gradient{
+  position:absolute;inset:0;overflow:hidden;pointer-events:none;
+  z-index:0;container-type:size;isolation:isolate;
+  border-radius:clamp(12px,2vw,28px);
+}
+.orbit-stage .pipo-gradient-colors{
+  position:absolute;inset:-16cqmin;
+  filter:blur(8cqmin);
+  background-color:#FAF9EF;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.305'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 68.1% 46.03%,rgba(230,176,147,1) 0%,rgba(230,176,147,.844) 10.28%,rgba(230,176,147,.5) 20.55%,rgba(230,176,147,.156) 30.83%,rgba(230,176,147,0) 41.1%),
+    radial-gradient(circle at 25.17% 75.99%,rgba(163,206,255,1) 0%,rgba(163,206,255,.844) 11.15%,rgba(163,206,255,.5) 22.3%,rgba(163,206,255,.156) 33.45%,rgba(163,206,255,0) 44.6%),
+    radial-gradient(circle at 53.11% 12.71%,rgba(250,249,239,1) 0%,rgba(250,249,239,.844) 16.66%,rgba(250,249,239,.5) 33.33%,rgba(250,249,239,.156) 49.99%,rgba(250,249,239,0) 66.65%);
+  background-size:120px 120px,auto,auto,auto;
+  background-blend-mode:overlay,normal,normal,normal;
+}
+.orbit-stage .pipo-gradient-grain{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:.305;mix-blend-mode:overlay;
+}
+.orbit-stage .orbit-wireframe{z-index:1}
+.orbit-stage .orbit-frame{z-index:1}
+.orbit-stage .orbit-dots{z-index:2}
+.orbit-stage .orbit-card{z-index:8}
+@supports not (container-type:size){
+  .orbit-stage .pipo-gradient-colors{inset:-18%;filter:blur(64px)}
+}
+@media (prefers-contrast:more){
+  .orbit-stage .pipo-gradient{opacity:.68}
+}
