@@ -1,6 +1,6 @@
 # Fable Options — Solana devnet sandbox
 
-**Status: source code compiles and native Rust unit tests pass. It is not deployed to devnet yet, is not independently audited, and has never handled real USDC. This is NOT the live Fable options exchange.**
+**Status (November 17, 2026): Rust and TypeScript tests pass, an SBF executable was compiled, and actual program instructions passed on a disposable LOCAL Solana validator. The program has NOT been deployed to public devnet or mainnet, is NOT audited, and has handled NO real USDC. This is NOT the live Fable options exchange.**
 
 The actual onchain Anchor program is in `programs/fable_devnet_options/src/lib.rs`. A separate deterministic TypeScript state-machine simulator and tests live in `../src/options/devnet-prototype-sim.ts` and `../src/options/devnet-prototype-sim.test.ts`.
 
@@ -18,7 +18,7 @@ The actual onchain Anchor program is in `programs/fable_devnet_options/src/lib.r
 
 The vault is an associated token account owned by a PDA derived from the writer's public key plus a nonce. The writer cannot withdraw committed collateral while a purchased option is active. The position state prevents double settlement. Solana transaction atomicity rolls back failed transfers. Math uses checked `u128` intermediate arithmetic and pays whole test-token micro-units. The program rejects **Circle's real Solana USDC mint** and is restricted to the legacy SPL token program for test collateral.
 
-**This is not a claim of a secure audited escrow.** The account-level flows have not yet been exercised in an SVM/local validator integration test, and a mock price reporter can choose any price without independent evidence.
+**This is not a claim of a secure audited escrow.** The program-controlled transfers and key authorization/settlement transitions have been tested on a local validator. A mock price reporter can still choose any price without independent evidence. Oracle timeouts, hostile token-program integrations and other attack scenarios have not been independently audited or exhaustively exercised.
 
 ## Build validation
 
@@ -26,7 +26,9 @@ The vault is an associated token account owned by a PDA derived from the writer'
 - `cargo test --manifest-path devnet/Cargo.toml`
 - `npm test` at the repository root runs the *local in-memory* option lifecycle simulator.
 - `.github/workflows/devnet-anchor-check.yml` checks the Rust program.
-- `.github/workflows/devnet-sbf-build.yml` attempts to build an SBF executable through the official Solana CLI and uploads the compiled ELF to GitHub Actions as a short-lived artifact. Compilation is not deployment.
+- `.github/workflows/devnet-sbf-build.yml` builds an SBF executable using the official Solana CLI, generates disposable test signing keys, deploys it to an **isolated local validator**, creates a six-decimal fake token, sends actual Solana instructions, and uploads the compiled ELF as a short-lived GitHub artifact. This is not a public devnet deployment.
+- **Verified local-validator transaction run:** https://github.com/fableoptions/fableoptions/actions/runs/44140237157 — `PASSED_LOCAL_VALIDATOR`. Test steps: `create_offer`, `buy_offer`, unauthorized oracle rejection, `publish_mock_expiry`, `settle_mock`, double-settlement rejection and `cancel_unsold`.
+- The passing run's disposable test token ended with **180 test USDC for buyer** and **120 for writer** (6-decimal micro-unit amounts: 180000000 and 120000000); the vault was emptied and closed. No real value was transferred.
 
 ## Why it isn't deployed automatically
 
@@ -36,7 +38,7 @@ A developer/operator (not a user of the exchange) would:
 1. Provision a dedicated devnet-only signer and program ID, sync `declare_id!` and `Anchor.toml` to its generated public key, and keep the private key in a secure vault.
 2. Use a six-decimal **disposable test token** (never native USDC), issue test funds to isolated buyer and writer wallets, and fund the deployment fee payer with devnet faucet SOL.
 3. Build and deploy to **devnet only** with `anchor build` and `anchor deploy --provider.cluster devnet`.
-4. Run real local-SVM transaction tests for full offer / buyer-premium / PDA-vault / oracle / payout / refund lifecycle, including unauthorized-caller, token-mint, replay and arithmetic attacks.
+4. Expand the already passing local-validator instruction tests to cover onchain *oracle-timeout refunds*, hostile token-program accounts, property-based fuzzing and more comprehensive unauthorized-caller and replay cases.
 5. Independently inspect deployed program ID, upgrade authority, escrow token accounts and event/transaction receipts.
 
 These steps are **not completed**. The current connected Railway services are deliberately not linked to this unaudited program and continue to refuse real-money trading.
