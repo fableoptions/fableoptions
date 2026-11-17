@@ -10,6 +10,7 @@ import { venueCandidateReport } from "./options/venue-candidates.js";
 import { evaluateFableVenue, UNVERIFIED_VENUE_FACTS } from "./options/venue-compatibility.js";
 import { assessTrackedToken } from "./options/token-risk-view.js";
 import { assessExpiryCapWindow, assessExpiryTokenPriceWindow } from "./options/expiry-reference.js";
+import { previewUsdcPayout,validateUsdcTerms,type UsdcOptionTerms } from "./options/usdc-settlement-model.js";
 const store = new FableStore(process.env.DATABASE_URL ?? "");
 await store.init();
 const rfqStore = new RfqStore(process.env.DATABASE_URL ?? "");
@@ -66,6 +67,32 @@ const server = createServer(async (request, response) => {
         response.writeHead(400);response.end(JSON.stringify({error:"invalid_input",details:errors}));return;
       }
       response.writeHead(200);response.end(JSON.stringify(theoreticalCappedOption(input)));return;
+    }
+    if (path === "/v1/options/usdc-payout-preview") {
+      const q=url.searchParams;
+      const required=["side","underlyingMint","underlyingDecimals","sizeAtomic",
+        "strikePricePicoUsd","premiumMicroUsdc","capMicroUsdc",
+        "expiryUnixSeconds","expiryPricePicoUsd"];
+      if(required.some(k=>!q.has(k)||q.get(k)==="")){
+        response.writeHead(400);response.end(JSON.stringify({error:"missing_usdc_preview_parameters"}));return;
+      }
+      const terms:UsdcOptionTerms={
+        side:q.get("side") as UsdcOptionTerms["side"],
+        underlyingMint:q.get("underlyingMint")??"",
+        underlyingDecimals:Number(q.get("underlyingDecimals")),
+        sizeAtomic:q.get("sizeAtomic")??"",
+        strikePricePicoUsd:q.get("strikePricePicoUsd")??"",
+        premiumMicroUsdc:q.get("premiumMicroUsdc")??"",
+        capMicroUsdc:q.get("capMicroUsdc")??"",
+        expiryUnixSeconds:Number(q.get("expiryUnixSeconds"))
+      };
+      try {
+        validateUsdcTerms(terms);
+        const result=previewUsdcPayout(terms,q.get("expiryPricePicoUsd")??"");
+        response.writeHead(200);response.end(JSON.stringify(result));return;
+      } catch {
+        response.writeHead(400);response.end(JSON.stringify({error:"invalid_usdc_preview_terms"}));return;
+      }
     }
     if (path === "/v1/options/integration-gates") {
       response.writeHead(200);
