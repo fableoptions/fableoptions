@@ -7,6 +7,9 @@ on:
       - 'devnet/scripts/**'
       - '.github/workflows/devnet-sbf-build.yml'
   workflow_dispatch:
+concurrency:
+  group: fable-local-sbf-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
