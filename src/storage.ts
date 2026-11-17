@@ -88,8 +88,8 @@ export class FableStore {
         : null;
       await c.query(
         `UPDATE launches SET latest_market_cap_usd=$2, latest_liquidity_usd=$3,
-         latest_pool=$4, last_price_at=$5, latest_price_source=$7,
-         next_poll_at=$5 + $6 * interval '1 second' WHERE mint=$1`,
+         latest_pool=$4, last_price_at=$5::timestamptz, latest_price_source=$7,
+         next_poll_at=$5::timestamptz + $6::double precision * interval '1 second' WHERE mint=$1`,
         [sample.mint, sample.marketCapUsd, sample.poolLiquidityUsd, sample.poolAddress,
          sample.observedAt, sample.marketCapUsd >= 100000 ? 90 : 300,sample.source??"unspecified"]
       );
