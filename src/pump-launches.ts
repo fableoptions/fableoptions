@@ -3,6 +3,8 @@ import { decodeLaunches, PUMP_PROGRAM_ID, type ParsedTx } from "./pump-decode.js
 import { FableStore } from "./storage.js";
 import { SignatureQueue } from "./ingest-queue.js";
 import { verifyPumpTransaction } from "./pump-verification.js";
+import { fetchRecentPumpSignatures } from "./pump-reconciliation.js";
+import { PumpReconciliationStore } from "./pump-reconciliation-store.js";
 
 /**
  * Mainnet activity subscriber with durable transaction job tracking.
@@ -17,8 +19,10 @@ if(!wsUrl.startsWith("wss://")||!rpcUrl.startsWith("https://")||!databaseUrl)
 const store=new FableStore(databaseUrl);
 const pool=new pg.Pool({connectionString:databaseUrl,max:3,connectionTimeoutMillis:8000});
 const jobs=new SignatureQueue(pool);
+const reconciliation=new PumpReconciliationStore(pool);
 await store.init();
 await jobs.init();
+await reconciliation.init();
 
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 let stopping=false;
@@ -66,6 +70,44 @@ async function handleSignature(signature:string){
     })+"\n");
   }
 }
+
+/**
+ * Periodic bounded replay. Small fixed cost per poll; unresolved gaps are
+ * persisted and never treated as complete history. RPC program addresses are
+ * high-traffic and this cannot replace a replay-capable indexer.
+ */
+const replayLimit=12;
+const replayEveryMs=300000;
+async function reconcileOnce(){
+  const checkpoint=await reconciliation.getCheckpoint();
+  try{
+    const signatures=await fetchRecentPumpSignatures(rpcUrl,replayLimit);
+    let queued=0;
+    for(const item of signatures){
+      if(item.signature===checkpoint)break;
+      if(item.err===null && await jobs.enqueue(item.signature,item.slot))queued++;
+    }
+    const report=await reconciliation.recordPage(signatures,checkpoint,replayLimit,queued);
+    process.stderr.write("[fable] bounded recovery "+JSON.stringify({
+      scanned:report.scanned,queued,gapDetected:report.gapDetected,
+      coverage:report.coverage
+    })+"\\n");
+  }catch(error){
+    await reconciliation.recordFailure(String(error));
+    process.stderr.write("[fable] bounded recovery failed: "+String(error)+"\\n");
+  }
+}
+async function reconciliationLoop(){
+  // Offset from startup to let WebSocket and RPC token processing initialize.
+  await sleep(15000);
+  while(!stopping){
+    try{await reconcileOnce();}catch(error){
+      process.stderr.write("[fable] reconciliation loop error: "+String(error)+"\\n");
+    }
+    await sleep(replayEveryMs);
+  }
+}
+
 async function work(){
   while(!stopping){
     try{
@@ -127,4 +169,5 @@ function connect(){
 process.once("SIGTERM",()=>{stopping=true;ws?.close();});
 process.once("SIGINT",()=>{stopping=true;ws?.close();});
 void work();
+void reconciliationLoop();
 connect();
