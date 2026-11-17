@@ -7,6 +7,8 @@
  * Only transactions from the specified block are considered; this never claims
  * coverage beyond the analyzed slot.
  */
+import bs58 from "bs58";
+const isWallet=(v:string):boolean=>{try{return bs58.decode(v).length===32;}catch{return false;}};
 type Balance={accountIndex:number;mint?:string;owner?:string;uiTokenAmount?:{amount?:string}};
 type Transaction={
   meta?:{err?:unknown;preTokenBalances?:Balance[]|null;postTokenBalances?:Balance[]|null};
@@ -18,6 +20,8 @@ export type SlotAcquisitionSignal={
   distinctReportedOwners:number;
   ownersWithMultiplePositiveDeltaTransactions:number;
   aggregatePositiveAtomic:string;
+  launchUnixSeconds?:number|null;
+  sampledAcquisitionWallets?:string[];
   participantCoverage:"partial_owner_fields"|"observed_balance_changes";
   possibleCoordination:"needs_review"|"not_established";
   fraudProven:false;
@@ -29,7 +33,8 @@ function positive(v:unknown):bigint|null{
  return BigInt(v);
 }
 export function analyzeLaunchSlot(
- mint:string,slot:number,launchSignature:string,transactions:Transaction[]
+ mint:string,slot:number,launchSignature:string,transactions:Transaction[],
+ launchUnixSeconds:number|null=null
 ):SlotAcquisitionSignal{
  if(!Number.isSafeInteger(slot)||slot<=0||transactions.length>5000||!launchSignature)
    throw new Error("invalid_slot_or_sample");
@@ -68,6 +73,8 @@ export function analyzeLaunchSlot(
   distinctReportedOwners:counts.size,
   ownersWithMultiplePositiveDeltaTransactions:[...counts.values()].filter(n=>n>1).length,
   aggregatePositiveAtomic:aggregate.toString(),
+  launchUnixSeconds:Number.isSafeInteger(launchUnixSeconds)&&launchUnixSeconds!>0?launchUnixSeconds:null,
+  sampledAcquisitionWallets:[...counts.keys()].filter(isWallet).slice(0,4),
   participantCoverage:missingOwner?"partial_owner_fields":"observed_balance_changes",
   possibleCoordination:withDelta>=3||[...counts.values()].some(n=>n>=2)?"needs_review":"not_established",
   fraudProven:false,bundlesProven:false,
@@ -100,7 +107,7 @@ export async function fetchLaunchSlot(
  }
  // Stream safely; a giant historical block should not exhaust worker memory.
  let payload:{
-  result?:{transactions?:Transaction[];blockHeight?:number}|null;
+  result?:{transactions?:Transaction[];blockHeight?:number;blockTime?:number|null}|null;
   error?:{code?:number}
  };
  if(result.body){
@@ -128,5 +135,6 @@ export async function fetchLaunchSlot(
  if(payload.error||!payload.result||!Array.isArray(payload.result.transactions))
    throw new Error("slot_rpc_unavailable_or_malformed");
  if(payload.result.transactions.length>5000)throw new Error("slot_sample_too_large");
- return analyzeLaunchSlot(mint,slot,launchSignature,payload.result.transactions);
+ return analyzeLaunchSlot(mint,slot,launchSignature,payload.result.transactions,
+   payload.result.blockTime??null);
 }
