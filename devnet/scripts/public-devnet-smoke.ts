@@ -97,6 +97,34 @@ async function main(){
  if((await getAccount(connection,v,"confirmed")).amount!==120_000_000n)
    throw new Error("buyer_premium_not_escrowed");
 
+ // Negative-path regression: an active trade must not refund before the
+ // oracle grace deadline, even if anyone invokes the timeout instruction.
+ const prematureRefund=ix("refund_without_price",[
+   k(config),k(testMint),k(p,false,true),
+   k(writer.publicKey,false,true),k(writerToken,false,true),
+   k(buyerToken,false,true),k(v,false,true),k(TOKEN_PROGRAM_ID)
+ ]);
+ let prematureRefundDenied=false;
+ try{await send("reject_premature_refund",prematureRefund,[]);}
+ catch{prematureRefundDenied=true;}
+ if(!prematureRefundDenied)throw new Error("premature_refund_accepted");
+ if((await getAccount(connection,v,"confirmed")).amount!==120_000_000n)
+   throw new Error("premature_refund_modified_collateral");
+
+ // Negative-path regression: substituting the writer's token account as the
+ // buyer payout destination must be rejected by onchain owner constraints.
+ const wrongBuyerDestination=ix("settle_mock",[
+   k(payer.publicKey,true),k(config),k(testMint),k(p,false,true),
+   k(writerToken,false,true),k(writerToken,false,true),
+   k(v,false,true),k(writer.publicKey,false,true),k(TOKEN_PROGRAM_ID)
+ ]);
+ let payoutSubstitutionDenied=false;
+ try{await send("reject_payout_substitution",wrongBuyerDestination,[]);}
+ catch{payoutSubstitutionDenied=true;}
+ if(!payoutSubstitutionDenied)throw new Error("substituted_buyer_destination_accepted");
+ if((await getAccount(connection,v,"confirmed")).amount!==120_000_000n)
+   throw new Error("payout_substitution_modified_collateral");
+
  // Exercise unauthorized mock price rejection before testing valid oracle.
  let denied=false;
  try{await send("unauthorized_mock_price",ix("publish_mock_expiry",[
@@ -156,7 +184,8 @@ async function main(){
   programId:programId.toBase58(),mint:testMint.toBase58(),
   exercised:["create_offer","buy_offer","reject_unauthorized_price",
    "publish_mock_expiry","settle_mock","reject_double_settle",
-   "reject_unauthorized_cancel","cancel_unsold"],
+   "reject_unauthorized_cancel","cancel_unsold",
+   "reject_premature_refund","reject_payout_substitution"],
   buyerFinalMicroTestUsd:String(buyerAfter),
   writerFinalMicroTestUsd:String(writerAfter),
   publicDevnet:true,disposableKeypair:true,
