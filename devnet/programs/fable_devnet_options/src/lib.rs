@@ -4,6 +4,7 @@
 //! No Fable backend production endpoint invokes these instructions.
 
 use anchor_lang::prelude::*;
+use core::str::FromStr;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{self, CloseAccount, Mint, TokenAccount, TokenInterface, TransferChecked},
@@ -27,6 +28,14 @@ pub mod fable_devnet_options {
     // One test configuration per deployed program, with a trusted mock reporter.
     pub fn initialize(ctx: Context<Initialize>, mock_oracle: Pubkey) -> Result<()> {
         require!(mock_oracle != Pubkey::default(), DevnetError::InvalidOracle);
+        // Never accept Circle's native mainnet USDC mint in this unaudited sandbox.
+        let real_usdc = Pubkey::from_str(
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+        ).map_err(|_| error!(DevnetError::InvalidTestMint))?;
+        require_keys_neq!(ctx.accounts.test_usdc_mint.key(), real_usdc,
+            DevnetError::InvalidTestMint);
+        require_keys_eq!(*ctx.accounts.test_usdc_mint.to_account_info().owner,
+            anchor_spl::token::ID, DevnetError::InvalidTestMint);
         let config = &mut ctx.accounts.config;
         config.admin = ctx.accounts.admin.key();
         config.mock_oracle = mock_oracle;
@@ -455,6 +464,8 @@ pub enum DevnetError {
     WriterMustSign,
     #[msg("Refund destination is not owned by option buyer")]
     IncorrectBuyerRefund,
+    #[msg("Only fresh legacy SPL test tokens are accepted; native USDC is forbidden")]
+    InvalidTestMint,
 }
 
 #[cfg(test)]
