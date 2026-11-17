@@ -77,6 +77,17 @@ The repository's public devnet test has not passed until Actions logs explicitly
 print `PASSED_PUBLIC_DEVNET`. A passing local-validator test is not equivalent
 to a public devnet deployment. The shared payer is for valueless tests only.
 
+## Public devnet deployment attempt and no-code funding handoff
+
+As of November 17, 2026, the public-devnet GitHub Actions deployment builds successfully, but **no public devnet deployment succeeded**. Two CLI airdrop attempts failed with rate limits, and the independent devnet proof-of-work faucets returned insufficient available SOL (the current faucet discovery reported balances of mostly zero). The disposable fee-payer remained empty; the workflow correctly refused to deploy. All attempted keys were disposable GitHub runner identities, not user wallets.
+
+- Evidence: [initial standard faucet failure](https://github.com/fableoptions/fableoptions/actions/runs/44142632286), [POW faucet availability check](https://github.com/fableoptions/fableoptions/actions/runs/44145440689).
+- The [public devnet smoke test workflow](https://github.com/fableoptions/fableoptions/actions/workflows/public-devnet-options-smoke.yml) is now **manual opt-in only**. It generates disposable devnet program and payer keys and prints the fee payer's **public** address in the `Create disposable DEVNET identities` step.
+- A nontechnical authorized operator can open the GitHub Actions workflow, press **Run workflow**, copy the public fee-payer address from the job log, and use their own browser to request **approximately 3 *free* devnet SOL** from a Solana devnet faucet. The job checks the wallet for about ten minutes, then builds and deploys the sandbox only if at least 2.5 devnet SOL arrives. Never send real SOL or actual USDC, and never provide private keys to the chat.
+- Public devnet program keys are disposable and **not saved**. A successful run demonstrates real devnet test-token transactions but does not produce a maintainable production deployment or certified escrow. Future persistent deployment would require separately managed devnet-only secrets and owner-approved access.
+
+This manual step is the only user intervention currently required to attempt the public devnet proof. No coding is needed, no purchase is required, and Fable's production services remain disconnected.
+
 ## Critical risks before any mainnet release
 
 - The demo oracle is a centralized mock signer with arbitrary price control, not a manipulation-resistant price source for new Pump.fun tokens.
